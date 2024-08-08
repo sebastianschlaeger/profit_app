@@ -39,10 +39,10 @@ def manage_material_costs():
     st.subheader("Materialkosten verwalten")
     
     try:
-        deliveries = load_supplier_deliveries()
+        costs = load_material_costs()
         
         edited_df = st.data_editor(
-            deliveries,
+            costs,
             column_config={
                 "SKU": st.column_config.TextColumn("SKU"),
                 "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
@@ -52,7 +52,7 @@ def manage_material_costs():
         )
         
         if st.button("Änderungen speichern"):
-            save_supplier_deliveries(edited_df)
+            save_material_costs(edited_df)
             st.success("Änderungen wurden gespeichert.")
     except Exception as e:
         logger.error(f"Fehler beim Verwalten der Materialkosten: {str(e)}")
