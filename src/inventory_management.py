@@ -15,6 +15,8 @@ def load_material_costs():
                 df = pd.read_csv(f)
                 # Ensure SKU is treated as string
                 df['SKU'] = df['SKU'].astype(str)
+                # Convert 'Date' to datetime
+                df['Date'] = pd.to_datetime(df['Date']).dt.date
                 return df
         return pd.DataFrame(columns=['SKU', 'Cost', 'Date'])
     except Exception as e:
@@ -28,6 +30,8 @@ def save_material_costs(df):
     try:
         # Ensure SKU is treated as string before saving
         df['SKU'] = df['SKU'].astype(str)
+        # Convert 'Date' to string for storage
+        df['Date'] = df['Date'].astype(str)
         with s3.open(file_path, 'w') as f:
             df.to_csv(f, index=False)
     except Exception as e:
