@@ -47,7 +47,6 @@ def manage_material_costs():
             column_config={
                 "SKU": st.column_config.TextColumn("SKU"),
                 "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
-                "Date": st.column_config.DateColumn("Gültig ab Datum", format="YYYY-MM-DD"),
             },
             num_rows="dynamic"
         )
