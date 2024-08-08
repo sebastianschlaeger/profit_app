@@ -187,13 +187,42 @@ def manage_material_costs():
         save_material_costs(edited_df)
         st.success("Änderungen wurden gespeichert.")
 
+def extract_skus_and_quantities(order_items):
+    items = json.loads(order_items) if isinstance(order_items, str) else order_items
+    return [(item['Product']['SKU'], item['Quantity']) for item in items]
+
 def calculate_overview_data(billbee_data, material_costs):
     try:
+        logger.info(f"Spalten in billbee_data: {billbee_data.columns.tolist()}")
+        logger.info(f"Spalten in material_costs: {material_costs.columns.tolist()}")
+        
+        if 'OrderItems' not in billbee_data.columns:
+            logger.error("'OrderItems' Spalte fehlt in billbee_data")
+            raise KeyError("'OrderItems' Spalte fehlt in billbee_data")
+        
+        if 'SKU' not in material_costs.columns:
+            logger.error("'SKU' Spalte fehlt in material_costs")
+            raise KeyError("'SKU' Spalte fehlt in material_costs")
+        
+        # Extrahieren der SKUs und Mengen aus OrderItems
+        billbee_data['SKU_Quantity'] = billbee_data['OrderItems'].apply(extract_skus_and_quantities)
+        
+        # Explodieren der SKU_Quantity Liste, um eine Zeile pro SKU zu erhalten
+        exploded_df = billbee_data.explode('SKU_Quantity')
+        exploded_df['SKU'] = exploded_df['SKU_Quantity'].apply(lambda x: x[0])
+        exploded_df['Quantity'] = exploded_df['SKU_Quantity'].apply(lambda x: x[1])
+        
         # Zusammenführen der Bestelldaten mit den Materialkosten
-        merged = billbee_data.merge(material_costs, left_on='SKU', right_on='SKU', how='left')
+        merged = exploded_df.merge(material_costs, on='SKU', how='left')
+        
+        # Überprüfen auf fehlende Werte nach dem Merge
+        missing_costs = merged[merged['Cost'].isna()]
+        if not missing_costs.empty:
+            logger.warning(f"{len(missing_costs)} Zeilen haben keine zugeordneten Materialkosten")
+            logger.warning(f"SKUs ohne Materialkosten: {missing_costs['SKU'].unique().tolist()}")
         
         # Berechnung der relevanten Metriken
-        merged['MaterialCost'] = merged['Quantity'] * merged['Cost']
+        merged['MaterialCost'] = merged['Quantity'] * merged['Cost'].fillna(0)
         merged['GrossRevenue'] = merged['TotalPrice']
         merged['NetRevenue'] = merged['TotalPrice'] - merged['TaxAmount']
         
