@@ -34,8 +34,14 @@ def load_and_process_billbee_data(file_path):
     
     return df, grouped
 
-def load_material_costs(file_path):
-    return pd.read_csv(file_path)
+def load_material_costs(file_path='material_costs.csv'):
+    try:
+        return pd.read_csv(file_path)
+    except FileNotFoundError:
+        return pd.DataFrame(columns=['SKU', 'Cost'])
+
+def save_material_costs(df, file_path='material_costs.csv'):
+    df.to_csv(file_path, index=False)
 
 def calculate_material_costs(orders_df, material_costs_df):
     # Extrahieren der ersten 5 Ziffern aus der SKU für die Zuordnung
@@ -112,7 +118,7 @@ def display_overview_table(start_date, end_date):
         if all_data:
             combined_df = pd.concat(all_data, ignore_index=True)
             billbee_data, grouped_orders = load_and_process_billbee_data(combined_df)
-            material_costs = load_material_costs('material_costs.csv')
+            material_costs = load_material_costs()
             processed_data = calculate_material_costs(billbee_data, material_costs)
             final_data = calculate_profit(processed_data)
             
@@ -130,23 +136,54 @@ def display_overview_table(start_date, end_date):
         logger.error(f"Fehler beim Verarbeiten der Daten: {str(e)}")
         st.error("Fehler beim Verarbeiten der Daten. Bitte überprüfen Sie die Logs für weitere Details.")
 
+def manage_material_costs():
+    st.subheader("Materialkosten verwalten")
+    
+    costs = load_material_costs()
+    
+    edited_df = st.data_editor(
+        costs,
+        column_config={
+            "SKU": st.column_config.TextColumn("SKU"),
+            "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
+        },
+        num_rows="dynamic"
+    )
+    
+    if st.button("Änderungen speichern"):
+        save_material_costs(edited_df)
+        st.success("Änderungen wurden gespeichert.")
+
 def main():
     st.title("E-Commerce Profitabilitäts-App")
     
-    if st.button("Daten von gestern abrufen"):
-        fetch_yesterday_data()
+    menu = ["Daten abrufen", "Übersicht anzeigen", "Materialkosten verwalten"]
+    choice = st.sidebar.selectbox("Menü", menu)
     
-    col1, col2 = st.columns(2)
-    with col1:
+    if choice == "Daten abrufen":
+        st.subheader("Daten abrufen")
+        if st.button("Daten von gestern abrufen"):
+            fetch_yesterday_data()
+        
+        st.subheader("Daten für Zeitraum abrufen")
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("Startdatum", datetime.now().date() - timedelta(days=7))
+        with col2:
+            end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
+        
+        if st.button("Daten für Zeitraum abrufen"):
+            fetch_data_for_range(start_date, end_date)
+    
+    elif choice == "Übersicht anzeigen":
+        st.subheader("Übersicht anzeigen")
         start_date = st.date_input("Startdatum", datetime.now().date() - timedelta(days=7))
-    with col2:
         end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
+        if st.button("Übersichtstabelle anzeigen"):
+            display_overview_table(start_date, end_date)
     
-    if st.button("Daten für Zeitraum abrufen"):
-        fetch_data_for_range(start_date, end_date)
-    
-    if st.button("Übersichtstabelle anzeigen"):
-        display_overview_table(start_date, end_date)
+    elif choice == "Materialkosten verwalten":
+        manage_material_costs()
 
 if __name__ == "__main__":
     main()
