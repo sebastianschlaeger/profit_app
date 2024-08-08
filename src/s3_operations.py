@@ -26,6 +26,7 @@ def save_to_s3(new_data, date):
         logger.error(f"Fehler beim Speichern in S3: {str(e)}")
         raise
 
+
 def get_saved_dates(days=30):
     """Holt gespeicherte Daten aus S3."""
     try:
@@ -69,6 +70,22 @@ def get_all_data_since_date(start_date):
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Daten: {str(e)}")
         return pd.DataFrame()
+
+def save_daily_order_data(df, date):
+    """Speichert tägliche Bestelldaten in S3."""
+    try:
+        s3 = get_s3_fs()
+        bucket_name = st.secrets['aws']['S3_BUCKET_NAME']
+        file_name = f"daily_orders_{date.strftime('%Y-%m-%d')}.csv"
+        full_path = f"{bucket_name}/{file_name}"
+        
+        with s3.open(full_path, 'w') as f:
+            df.to_csv(f, index=False)
+        
+        logger.info(f"Tägliche Bestelldaten für {date} erfolgreich in S3 gespeichert.")
+    except Exception as e:
+        logger.error(f"Fehler beim Speichern der täglichen Bestelldaten in S3: {str(e)}")
+        raise
 
 def load_existing_data(s3, file_path):
     """Lädt existierende Daten aus S3."""
