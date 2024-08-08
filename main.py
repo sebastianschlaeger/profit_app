@@ -117,40 +117,57 @@ def display_overview_table(start_date, end_date):
     
     try:
         all_data = []
+        missing_dates = []
         current_date = start_date
         while current_date <= end_date:
             df = load_from_s3(current_date)
-            if df is not None:
+            if df is not None and not df.empty:
                 all_data.append(df)
+                logger.info(f"Daten für {current_date} erfolgreich geladen.")
+            else:
+                missing_dates.append(current_date)
+                logger.warning(f"Keine Daten für {current_date} gefunden.")
             current_date += timedelta(days=1)
         
         if all_data:
             combined_df = pd.concat(all_data, ignore_index=True)
+            logger.info(f"Gesamtanzahl der geladenen Datensätze: {len(combined_df)}")
+            
             material_costs = load_material_costs()
+            logger.info(f"Anzahl der geladenen Materialkosten: {len(material_costs)}")
             
-            overview_data = calculate_overview_data(combined_df, material_costs)
-            
-            # Anzeige der Übersichtstabelle
-            st.dataframe(overview_data)
-            
-            # Berechnung und Anzeige der Gesamtwerte
-            total_gross_revenue = overview_data['GrossRevenue'].sum()
-            total_net_revenue = overview_data['NetRevenue'].sum()
-            total_material_cost = overview_data['MaterialCost'].sum()
-            total_material_cost_percentage = (total_material_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
-            total_contribution_margin = total_net_revenue - total_material_cost
-            
-            st.subheader("Zusammenfassung:")
-            st.write(f"Umsatz Brutto: {total_gross_revenue:.2f} EUR")
-            st.write(f"Umsatz Netto: {total_net_revenue:.2f} EUR")
-            st.write(f"Materialkosten: {total_material_cost:.2f} EUR")
-            st.write(f"Materialkosten %: {total_material_cost_percentage:.2f}%")
-            st.write(f"Deckungsbeitrag 1: {total_contribution_margin:.2f} EUR")
+            if combined_df.empty:
+                st.warning("Die geladenen Daten sind leer.")
+                logger.warning("Combined DataFrame ist leer.")
+            elif material_costs.empty:
+                st.warning("Keine Materialkosten gefunden.")
+                logger.warning("Material costs DataFrame ist leer.")
+            else:
+                overview_data = calculate_overview_data(combined_df, material_costs)
+                
+                if overview_data.empty:
+                    st.warning("Die berechnete Übersicht ist leer.")
+                    logger.warning("Berechnete Übersichtsdaten sind leer.")
+                else:
+                    st.dataframe(overview_data)
+                    display_summary(overview_data)
         else:
-            st.warning("Keine Daten für den ausgewählten Zeitraum verfügbar.")
+            st.warning(f"Keine Daten für den ausgewählten Zeitraum verfügbar.")
+            if missing_dates:
+                st.info(f"Fehlende Daten für folgende Tage: {', '.join(str(date) for date in missing_dates)}")
+            logger.warning(f"Keine Daten für den Zeitraum von {start_date} bis {end_date} gefunden.")
+        
+        # Zusätzliche Debugging-Informationen
+        st.subheader("Debugging-Informationen:")
+        st.write(f"Startdatum: {start_date}")
+        st.write(f"Enddatum: {end_date}")
+        st.write(f"Anzahl der geladenen Datensätze: {sum(len(df) for df in all_data)}")
+        st.write(f"Anzahl der Tage ohne Daten: {len(missing_dates)}")
+        
     except Exception as e:
-        logger.error(f"Fehler beim Verarbeiten der Daten: {str(e)}")
-        st.error("Fehler beim Verarbeiten der Daten. Bitte überprüfen Sie die Logs für weitere Details.")
+        logger.error(f"Fehler beim Verarbeiten der Daten: {str(e)}", exc_info=True)
+        st.error(f"Fehler beim Verarbeiten der Daten: {str(e)}")
+        st.error("Bitte überprüfen Sie die Logs für weitere Details.")
 
 def manage_material_costs():
     st.subheader("Materialkosten verwalten")
@@ -171,26 +188,44 @@ def manage_material_costs():
         st.success("Änderungen wurden gespeichert.")
 
 def calculate_overview_data(billbee_data, material_costs):
-    # Zusammenführen der Bestelldaten mit den Materialkosten
-    merged = billbee_data.merge(material_costs, left_on='SKU', right_on='SKU', how='left')
+    try:
+        # Zusammenführen der Bestelldaten mit den Materialkosten
+        merged = billbee_data.merge(material_costs, left_on='SKU', right_on='SKU', how='left')
+        
+        # Berechnung der relevanten Metriken
+        merged['MaterialCost'] = merged['Quantity'] * merged['Cost']
+        merged['GrossRevenue'] = merged['TotalPrice']
+        merged['NetRevenue'] = merged['TotalPrice'] - merged['TaxAmount']
+        
+        # Aggregation auf Bestellebene
+        order_summary = merged.groupby('OrderNumber').agg({
+            'GrossRevenue': 'sum',
+            'NetRevenue': 'sum',
+            'MaterialCost': 'sum'
+        }).reset_index()
+        
+        # Berechnung der zusätzlichen Metriken
+        order_summary['MaterialCostPercentage'] = (order_summary['MaterialCost'] / order_summary['NetRevenue']) * 100
+        order_summary['ContributionMargin1'] = order_summary['NetRevenue'] - order_summary['MaterialCost']
+        
+        return order_summary
+    except Exception as e:
+        logger.error(f"Fehler bei der Berechnung der Übersichtsdaten: {str(e)}", exc_info=True)
+        raise
+        
+def display_summary(overview_data):
+    total_gross_revenue = overview_data['GrossRevenue'].sum()
+    total_net_revenue = overview_data['NetRevenue'].sum()
+    total_material_cost = overview_data['MaterialCost'].sum()
+    total_material_cost_percentage = (total_material_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
+    total_contribution_margin = total_net_revenue - total_material_cost
     
-    # Berechnung der relevanten Metriken
-    merged['MaterialCost'] = merged['Quantity'] * merged['Cost']
-    merged['GrossRevenue'] = merged['TotalPrice']
-    merged['NetRevenue'] = merged['TotalPrice'] - merged['TaxAmount']
-    
-    # Aggregation auf Bestellebene
-    order_summary = merged.groupby('OrderNumber').agg({
-        'GrossRevenue': 'sum',
-        'NetRevenue': 'sum',
-        'MaterialCost': 'sum'
-    }).reset_index()
-    
-    # Berechnung der zusätzlichen Metriken
-    order_summary['MaterialCostPercentage'] = (order_summary['MaterialCost'] / order_summary['NetRevenue']) * 100
-    order_summary['ContributionMargin1'] = order_summary['NetRevenue'] - order_summary['MaterialCost']
-    
-    return order_summary
+    st.subheader("Zusammenfassung:")
+    st.write(f"Umsatz Brutto: {total_gross_revenue:.2f} EUR")
+    st.write(f"Umsatz Netto: {total_net_revenue:.2f} EUR")
+    st.write(f"Materialkosten: {total_material_cost:.2f} EUR")
+    st.write(f"Materialkosten %: {total_material_cost_percentage:.2f}%")
+    st.write(f"Deckungsbeitrag 1: {total_contribution_margin:.2f} EUR")
 
 def main():
     st.title("E-Commerce Profitabilitäts-App")
