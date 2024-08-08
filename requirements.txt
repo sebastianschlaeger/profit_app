@@ -1,0 +1,5 @@
+streamlit
+pandas
+requests
+s3fs
+plotly
