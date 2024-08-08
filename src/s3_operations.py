@@ -26,7 +26,6 @@ def save_to_s3(new_data, date):
         logger.error(f"Fehler beim Speichern in S3: {str(e)}")
         raise
 
-
 def get_saved_dates(days=30):
     """Holt gespeicherte Daten aus S3."""
     try:
@@ -44,7 +43,8 @@ def get_saved_dates(days=30):
 
 def load_from_s3(date):
     s3 = get_s3_fs()
-    filename = f"orders_{date.strftime('%Y-%m-%d')}.csv"
+    bucket_name = st.secrets['aws']['S3_BUCKET_NAME']
+    filename = f"{bucket_name}/orders_{date.strftime('%Y-%m-%d')}.csv"
     try:
         if s3.exists(filename):
             with s3.open(filename, 'rb') as f:
@@ -53,7 +53,6 @@ def load_from_s3(date):
     except Exception as e:
         logger.error(f"Fehler beim Laden der Daten aus S3: {str(e)}")
         raise
-
 
 def get_all_data_since_date(start_date):
     """Holt alle Daten seit einem bestimmten Datum."""
@@ -70,3 +69,23 @@ def get_all_data_since_date(start_date):
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Daten: {str(e)}")
         return pd.DataFrame()
+
+def load_existing_data(s3, file_path):
+    """Lädt existierende Daten aus S3."""
+    with s3.open(file_path, 'rb') as f:
+        return pd.read_csv(f)
+
+def prepare_new_data(new_data, date):
+    """Bereitet neue Daten für das Speichern vor."""
+    new_data['Date'] = date
+    return new_data
+
+def combine_data(existing_data, new_data, date):
+    """Kombiniert existierende und neue Daten."""
+    new_data['Date'] = date
+    return pd.concat([existing_data, new_data], ignore_index=True)
+
+def save_combined_data(s3, file_path, data):
+    """Speichert kombinierte Daten in S3."""
+    with s3.open(file_path, 'w') as f:
+        data.to_csv(f, index=False)
