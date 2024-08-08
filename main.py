@@ -34,14 +34,17 @@ def load_and_process_billbee_data(file_path):
     
     return df, grouped
 
+@st.cache_data
 def load_material_costs(file_path='material_costs.csv'):
-    try:
+    if os.path.exists(file_path):
         return pd.read_csv(file_path)
-    except FileNotFoundError:
+    else:
+        st.warning(f"Die Datei {file_path} wurde nicht gefunden. Es wird eine leere Tabelle erstellt.")
         return pd.DataFrame(columns=['SKU', 'Cost'])
 
 def save_material_costs(df, file_path='material_costs.csv'):
     df.to_csv(file_path, index=False)
+    st.cache_data.clear()  # Cache leeren, damit die Änderungen beim nächsten Laden berücksichtigt werden
 
 def calculate_material_costs(orders_df, material_costs_df):
     # Extrahieren der ersten 5 Ziffern aus der SKU für die Zuordnung
@@ -156,6 +159,9 @@ def manage_material_costs():
 
 def main():
     st.title("E-Commerce Profitabilitäts-App")
+    
+    # Laden der Materialkosten beim Start der App
+    material_costs = load_material_costs()
     
     menu = ["Daten abrufen", "Übersicht anzeigen", "Materialkosten verwalten"]
     choice = st.sidebar.selectbox("Menü", menu)
