@@ -61,11 +61,33 @@ def manage_material_costs():
 def get_material_cost_for_date(sku, date):
     try:
         deliveries = load_supplier_deliveries()
-        relevant_costs = deliveries[(deliveries['SKU'] == sku) & (deliveries['Date'] <= date)]
-        if relevant_costs.empty:
-            logger.warning(f"Keine Materialkosten gefunden für SKU {sku} am {date}")
+        
+        # Convert the date column to datetime
+        deliveries['Date'] = pd.to_datetime(deliveries['Date'])
+        
+        # Filter deliveries by date
+        relevant_deliveries = deliveries[deliveries['Date'] <= date]
+        
+        if relevant_deliveries.empty:
+            logger.warning(f"Keine Materialkosten gefunden für Datum {date}")
             return None
-        return relevant_costs.sort_values('Date', ascending=False).iloc[0]['Cost']
+        
+        # Sort deliveries by date in descending order
+        relevant_deliveries = relevant_deliveries.sort_values('Date', ascending=False)
+        
+        # Try to find an exact match first
+        exact_match = relevant_deliveries[relevant_deliveries['SKU'] == sku]
+        if not exact_match.empty:
+            return exact_match.iloc[0]['Cost']
+        
+        # If no exact match, try partial match
+        for _, row in relevant_deliveries.iterrows():
+            if sku.startswith(row['SKU']):
+                logger.info(f"Partielle Übereinstimmung gefunden: SKU {sku} entspricht Material-SKU {row['SKU']}")
+                return row['Cost']
+        
+        logger.warning(f"Keine Materialkosten gefunden für SKU {sku} am {date}")
+        return None
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Materialkosten für SKU {sku} am {date}: {str(e)}")
         return None
@@ -83,7 +105,7 @@ def display_overview_table():
             if df is not None:
                 gross_revenue = df['GrossAmount'].sum()
                 net_revenue = gross_revenue / 1.19  # Assuming 19% VAT
-                material_costs = df.apply(lambda row: get_material_cost_for_date(row['SKU'], single_date) * row['Quantity'], axis=1).sum()
+                material_costs = df.apply(lambda row: (get_material_cost_for_date(row['SKU'], single_date) or 0) * row['Quantity'], axis=1).sum()
                 
                 data[single_date] = {
                     'Umsatz Brutto': gross_revenue,
