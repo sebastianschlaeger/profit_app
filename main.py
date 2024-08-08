@@ -3,9 +3,11 @@ from datetime import datetime, timedelta
 import logging
 import pandas as pd
 import os
+import json
 from src.billbee_api import BillbeeAPI
 from src.s3_operations import save_to_s3, get_saved_dates, load_from_s3, save_daily_order_data
 from src.s3_utils import get_s3_fs
+
 
 # Configure logging
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -188,8 +190,18 @@ def manage_material_costs():
         st.success("Änderungen wurden gespeichert.")
 
 def extract_skus_and_quantities(order_items):
-    items = json.loads(order_items) if isinstance(order_items, str) else order_items
-    return [(item['Product']['SKU'], item['Quantity']) for item in items]
+    try:
+        if isinstance(order_items, str):
+            items = json.loads(order_items)
+        elif isinstance(order_items, list):
+            items = order_items
+        else:
+            items = literal_eval(order_items)
+        return [(item['Product']['SKU'], item['Quantity']) for item in items]
+    except Exception as e:
+        logger.error(f"Fehler beim Extrahieren von SKUs und Mengen: {str(e)}")
+        logger.error(f"Problematische order_items: {order_items}")
+        return []
 
 def calculate_overview_data(billbee_data, material_costs):
     try:
@@ -209,8 +221,8 @@ def calculate_overview_data(billbee_data, material_costs):
         
         # Explodieren der SKU_Quantity Liste, um eine Zeile pro SKU zu erhalten
         exploded_df = billbee_data.explode('SKU_Quantity')
-        exploded_df['SKU'] = exploded_df['SKU_Quantity'].apply(lambda x: x[0])
-        exploded_df['Quantity'] = exploded_df['SKU_Quantity'].apply(lambda x: x[1])
+        exploded_df['SKU'] = exploded_df['SKU_Quantity'].apply(lambda x: x[0] if x else None)
+        exploded_df['Quantity'] = exploded_df['SKU_Quantity'].apply(lambda x: x[1] if x else 0)
         
         # Zusammenführen der Bestelldaten mit den Materialkosten
         merged = exploded_df.merge(material_costs, on='SKU', how='left')
