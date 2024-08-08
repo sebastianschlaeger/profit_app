@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import logging
 from src.billbee_api import BillbeeAPI
 from src.data_processor import process_orders
-from src.inventory_management import load_supplier_deliveries, save_supplier_deliveries
+from src.inventory_management import load_material_costs, save_material_costs
 from src.s3_operations import save_to_s3, get_saved_dates, load_from_s3
 from src.s3_utils import get_s3_fs
 
