@@ -41,6 +41,9 @@ def manage_material_costs():
     try:
         costs = load_material_costs()
         
+        # Convert 'Date' to string for display
+        costs['Date'] = costs['Date'].astype(str)
+        
         edited_df = st.data_editor(
             costs,
             column_config={
@@ -52,6 +55,8 @@ def manage_material_costs():
         )
         
         if st.button("Änderungen speichern"):
+            # Convert 'Date' back to datetime before saving
+            edited_df['Date'] = pd.to_datetime(edited_df['Date']).dt.date
             save_material_costs(edited_df)
             st.success("Änderungen wurden gespeichert.")
     except Exception as e:
