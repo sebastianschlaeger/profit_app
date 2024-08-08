@@ -1,5 +1,8 @@
 import requests
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 class BillbeeAPI:
     def __init__(self, api_key, username, password):
@@ -19,6 +22,10 @@ class BillbeeAPI:
         }
         auth = (self.username, self.password)
 
-        response = requests.get(endpoint, params=params, headers=headers, auth=auth)
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = requests.get(endpoint, params=params, headers=headers, auth=auth)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Fehler beim Abrufen der Bestellungen von Billbee: {str(e)}")
+            raise
