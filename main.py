@@ -126,19 +126,26 @@ def display_overview_table(start_date, end_date):
         
         if all_data:
             combined_df = pd.concat(all_data, ignore_index=True)
-            billbee_data, grouped_orders = load_and_process_billbee_data(combined_df)
             material_costs = load_material_costs()
-            processed_data = calculate_material_costs(billbee_data, material_costs)
-            final_data = calculate_profit(processed_data)
             
-            st.dataframe(final_data)
+            overview_data = calculate_overview_data(combined_df, material_costs)
+            
+            # Anzeige der Übersichtstabelle
+            st.dataframe(overview_data)
+            
+            # Berechnung und Anzeige der Gesamtwerte
+            total_gross_revenue = overview_data['GrossRevenue'].sum()
+            total_net_revenue = overview_data['NetRevenue'].sum()
+            total_material_cost = overview_data['MaterialCost'].sum()
+            total_material_cost_percentage = (total_material_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
+            total_contribution_margin = total_net_revenue - total_material_cost
             
             st.subheader("Zusammenfassung:")
-            st.write(f"Gesamtanzahl der Bestellungen: {len(final_data)}")
-            st.write(f"Gesamtumsatz: {final_data['NetRevenue'].sum():.2f} EUR")
-            st.write(f"Gesamtmaterialkosten: {final_data['MaterialCost'].sum():.2f} EUR")
-            st.write(f"Gesamtversandkosten: {final_data['ShippingCost'].sum():.2f} EUR")
-            st.write(f"Gesamtgewinn: {final_data['Profit'].sum():.2f} EUR")
+            st.write(f"Umsatz Brutto: {total_gross_revenue:.2f} EUR")
+            st.write(f"Umsatz Netto: {total_net_revenue:.2f} EUR")
+            st.write(f"Materialkosten: {total_material_cost:.2f} EUR")
+            st.write(f"Materialkosten %: {total_material_cost_percentage:.2f}%")
+            st.write(f"Deckungsbeitrag 1: {total_contribution_margin:.2f} EUR")
         else:
             st.warning("Keine Daten für den ausgewählten Zeitraum verfügbar.")
     except Exception as e:
@@ -162,6 +169,28 @@ def manage_material_costs():
     if st.button("Änderungen speichern"):
         save_material_costs(edited_df)
         st.success("Änderungen wurden gespeichert.")
+
+def calculate_overview_data(billbee_data, material_costs):
+    # Zusammenführen der Bestelldaten mit den Materialkosten
+    merged = billbee_data.merge(material_costs, left_on='SKU', right_on='SKU', how='left')
+    
+    # Berechnung der relevanten Metriken
+    merged['MaterialCost'] = merged['Quantity'] * merged['Cost']
+    merged['GrossRevenue'] = merged['TotalPrice']
+    merged['NetRevenue'] = merged['TotalPrice'] - merged['TaxAmount']
+    
+    # Aggregation auf Bestellebene
+    order_summary = merged.groupby('OrderNumber').agg({
+        'GrossRevenue': 'sum',
+        'NetRevenue': 'sum',
+        'MaterialCost': 'sum'
+    }).reset_index()
+    
+    # Berechnung der zusätzlichen Metriken
+    order_summary['MaterialCostPercentage'] = (order_summary['MaterialCost'] / order_summary['NetRevenue']) * 100
+    order_summary['ContributionMargin1'] = order_summary['NetRevenue'] - order_summary['MaterialCost']
+    
+    return order_summary
 
 def main():
     st.title("E-Commerce Profitabilitäts-App")
