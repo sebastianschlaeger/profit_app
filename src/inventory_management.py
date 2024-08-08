@@ -13,10 +13,8 @@ def load_material_costs():
         if s3.exists(file_path):
             with s3.open(file_path, 'rb') as f:
                 df = pd.read_csv(f)
-                # Ensure SKU is treated as string
                 df['SKU'] = df['SKU'].astype(str)
-                # Convert 'Date' to datetime
-                df['Date'] = pd.to_datetime(df['Date']).dt.date
+                df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
                 return df
         return pd.DataFrame(columns=['SKU', 'Cost', 'Date'])
     except Exception as e:
@@ -28,10 +26,8 @@ def save_material_costs(df):
     bucket_name = st.secrets['aws']['S3_BUCKET_NAME']
     file_path = f"{bucket_name}/material_costs.csv"
     try:
-        # Ensure SKU is treated as string before saving
         df['SKU'] = df['SKU'].astype(str)
-        # Convert 'Date' to string for storage
-        df['Date'] = df['Date'].astype(str)
+        df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
         with s3.open(file_path, 'w') as f:
             df.to_csv(f, index=False)
     except Exception as e:
