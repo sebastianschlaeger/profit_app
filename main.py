@@ -42,22 +42,17 @@ def manage_material_costs():
     try:
         costs = load_material_costs()
         
-        # Convert 'Date' to string for display
-        costs['Date'] = costs['Date'].astype(str)
-        
         edited_df = st.data_editor(
             costs,
             column_config={
                 "SKU": st.column_config.TextColumn("SKU"),
                 "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
-                "Date": st.column_config.DateColumn("Gültig ab Datum"),
+                "Date": st.column_config.DateColumn("Gültig ab Datum", format="YYYY-MM-DD"),
             },
             num_rows="dynamic"
         )
         
         if st.button("Änderungen speichern"):
-            # Convert 'Date' back to datetime before saving
-            edited_df['Date'] = pd.to_datetime(edited_df['Date']).dt.date
             save_material_costs(edited_df)
             st.success("Änderungen wurden gespeichert.")
     except Exception as e:
