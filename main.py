@@ -15,11 +15,7 @@ logger = logging.getLogger(__name__)
 st.set_page_config(page_title="E-Commerce Profitabilitäts-App", layout="wide")
 
 # Initialize BillbeeAPI
-billbee_api = BillbeeAPI(
-    st.secrets["billbee"]["API_KEY"],
-    st.secrets["billbee"]["USERNAME"],
-    st.secrets["billbee"]["PASSWORD"]
-)
+billbee_api = BillbeeAPI()
 
 def fetch_yesterday_data():
     yesterday = datetime.now().date() - timedelta(days=1)
@@ -36,6 +32,16 @@ def fetch_yesterday_data():
     else:
         logger.warning(f"Daten für {yesterday} wurden bereits importiert.")
         st.info(f"Daten für {yesterday} wurden bereits importiert.")
+
+def fetch_data_for_range(start_date, end_date):
+    try:
+        orders_data = billbee_api.get_orders_for_date_range(start_date, end_date)
+        df = process_orders(orders_data)
+        save_to_s3(df, end_date)  # Sie müssen möglicherweise die Speichermethode anpassen
+        st.success(f"Daten von {start_date} bis {end_date} erfolgreich abgerufen und gespeichert.")
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen der Daten von {start_date} bis {end_date}: {str(e)}")
+        st.error(f"Fehler beim Abrufen der Daten von {start_date} bis {end_date}. Bitte überprüfen Sie die Logs für weitere Details.")
 
 def manage_material_costs():
     st.subheader("Materialkosten verwalten")
@@ -130,6 +136,16 @@ def main():
     
     if st.button("Daten von gestern abrufen"):
         fetch_yesterday_data()
+    
+    # Add a date range picker for fetching data for a specific range
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("Startdatum", datetime.now().date() - timedelta(days=7))
+    with col2:
+        end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
+    
+    if st.button("Daten für Zeitraum abrufen"):
+        fetch_data_for_range(start_date, end_date)
     
     display_overview_table()
     manage_material_costs()
