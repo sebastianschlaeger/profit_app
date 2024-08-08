@@ -3,8 +3,6 @@ from datetime import datetime, timedelta
 import logging
 import pandas as pd
 from src.billbee_api import BillbeeAPI
-from src.data_processor import process_orders
-from src.inventory_management import load_material_costs, save_material_costs
 from src.s3_operations import save_to_s3, get_saved_dates, load_from_s3, save_daily_order_data
 from src.s3_utils import get_s3_fs
 
@@ -17,12 +15,60 @@ st.set_page_config(page_title="E-Commerce Profitabilitäts-App", layout="wide")
 # Initialize BillbeeAPI
 billbee_api = BillbeeAPI()
 
+def load_and_process_billbee_data(file_path):
+    df = pd.read_csv(file_path)
+    df['CreatedAt'] = pd.to_datetime(df['CreatedAt']).dt.date
+    
+    # Gruppieren nach OrderNumber und summieren der relevanten Felder
+    grouped = df.groupby('OrderNumber').agg({
+        'CreatedAt': 'first',
+        'TotalCost': 'sum',
+        'ShippingCost': 'sum',
+        'TotalPrice': 'sum',
+        'TaxAmount': 'sum',
+        'Quantity': 'sum'
+    }).reset_index()
+    
+    # Berechnen des Nettoumsatzes
+    grouped['NetRevenue'] = grouped['TotalPrice'] - grouped['TaxAmount']
+    
+    return df, grouped
+
+def load_material_costs(file_path):
+    return pd.read_csv(file_path)
+
+def calculate_material_costs(orders_df, material_costs_df):
+    # Extrahieren der ersten 5 Ziffern aus der SKU für die Zuordnung
+    orders_df['SKU_prefix'] = orders_df['SKU'].str[:5]
+    material_costs_df['SKU_prefix'] = material_costs_df['SKU'].str[:5]
+    
+    # Zusammenführen der Bestellungen mit den Materialkosten
+    merged = orders_df.merge(material_costs_df, on='SKU_prefix', how='left')
+    
+    # Berechnen der Materialkosten pro Bestellung
+    merged['MaterialCost'] = merged['Quantity'] * merged['Cost']
+    
+    return merged
+
+def calculate_profit(processed_df):
+    # Gruppieren nach OrderNumber und berechnen der Gesamtmaterialkosten
+    order_costs = processed_df.groupby('OrderNumber').agg({
+        'MaterialCost': 'sum',
+        'NetRevenue': 'first',
+        'ShippingCost': 'first'
+    }).reset_index()
+    
+    # Berechnen des Gewinns
+    order_costs['Profit'] = order_costs['NetRevenue'] - order_costs['MaterialCost'] - order_costs['ShippingCost']
+    
+    return order_costs
+
 def fetch_yesterday_data():
     yesterday = datetime.now().date() - timedelta(days=1)
     if yesterday not in get_saved_dates():
         try:
             orders_data = billbee_api.get_orders_for_date(yesterday)
-            df = process_orders(orders_data)
+            df = pd.DataFrame(orders_data)
             save_daily_order_data(df, yesterday)
             save_to_s3(df, yesterday)
             st.success(f"Daten für {yesterday} erfolgreich abgerufen und gespeichert.")
@@ -35,101 +81,54 @@ def fetch_yesterday_data():
 
 def fetch_data_for_range(start_date, end_date):
     try:
-        orders_data = billbee_api.get_orders_for_date_range(start_date, end_date)
-        df = process_orders(orders_data)
-        save_to_s3(df, end_date)  # Sie müssen möglicherweise die Speichermethode anpassen
+        all_data = []
+        current_date = start_date
+        while current_date <= end_date:
+            orders_data = billbee_api.get_orders_for_date(current_date)
+            df = pd.DataFrame(orders_data)
+            all_data.append(df)
+            save_daily_order_data(df, current_date)
+            current_date += timedelta(days=1)
+        
+        combined_df = pd.concat(all_data, ignore_index=True)
+        save_to_s3(combined_df, end_date)
         st.success(f"Daten von {start_date} bis {end_date} erfolgreich abgerufen und gespeichert.")
     except Exception as e:
         logger.error(f"Fehler beim Abrufen der Daten von {start_date} bis {end_date}: {str(e)}")
         st.error(f"Fehler beim Abrufen der Daten von {start_date} bis {end_date}. Bitte überprüfen Sie die Logs für weitere Details.")
 
-def manage_material_costs():
-    st.subheader("Materialkosten verwalten")
+def display_overview_table(start_date, end_date):
+    st.subheader(f"Übersichtstabelle ({start_date} bis {end_date})")
     
     try:
-        costs = load_material_costs()
-        
-        edited_df = st.data_editor(
-            costs,
-            column_config={
-                "SKU": st.column_config.TextColumn("SKU"),
-                "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
-            },
-            num_rows="dynamic"
-        )
-        
-        if st.button("Änderungen speichern"):
-            save_material_costs(edited_df)
-            st.success("Änderungen wurden gespeichert.")
-    except Exception as e:
-        logger.error(f"Fehler beim Verwalten der Materialkosten: {str(e)}")
-        st.error("Fehler beim Verwalten der Materialkosten. Bitte überprüfen Sie die Logs für weitere Details.")
-
-def get_material_cost_for_date(sku, date):
-    try:
-        deliveries = load_supplier_deliveries()
-        
-        # Convert the date column to datetime
-        deliveries['Date'] = pd.to_datetime(deliveries['Date'])
-        
-        # Filter deliveries by date
-        relevant_deliveries = deliveries[deliveries['Date'] <= date]
-        
-        if relevant_deliveries.empty:
-            logger.warning(f"Keine Materialkosten gefunden für Datum {date}")
-            return None
-        
-        # Sort deliveries by date in descending order
-        relevant_deliveries = relevant_deliveries.sort_values('Date', ascending=False)
-        
-        # Try to find an exact match first
-        exact_match = relevant_deliveries[relevant_deliveries['SKU'] == sku]
-        if not exact_match.empty:
-            return exact_match.iloc[0]['Cost']
-        
-        # If no exact match, try partial match
-        for _, row in relevant_deliveries.iterrows():
-            if sku.startswith(row['SKU']):
-                logger.info(f"Partielle Übereinstimmung gefunden: SKU {sku} entspricht Material-SKU {row['SKU']}")
-                return row['Cost']
-        
-        logger.warning(f"Keine Materialkosten gefunden für SKU {sku} am {date}")
-        return None
-    except Exception as e:
-        logger.error(f"Fehler beim Abrufen der Materialkosten für SKU {sku} am {date}: {str(e)}")
-        return None
-
-def display_overview_table():
-    st.subheader("Übersichtstabelle (Letzten 30 Tage)")
-    
-    end_date = datetime.now().date() - timedelta(days=1)
-    start_date = end_date - timedelta(days=29)
-    
-    data = {}
-    for single_date in (start_date + timedelta(n) for n in range(30)):
-        try:
-            df = load_from_s3(single_date)
+        all_data = []
+        current_date = start_date
+        while current_date <= end_date:
+            df = load_from_s3(current_date)
             if df is not None:
-                gross_revenue = df['GrossAmount'].sum()
-                net_revenue = gross_revenue / 1.19  # Assuming 19% VAT
-                material_costs = df.apply(lambda row: (get_material_cost_for_date(row['SKU'], single_date) or 0) * row['Quantity'], axis=1).sum()
-                
-                data[single_date] = {
-                    'Umsatz Brutto': gross_revenue,
-                    'Umsatz Netto': net_revenue,
-                    'Materialkosten €': material_costs,
-                    'Materialkosten %': (material_costs / net_revenue) * 100 if net_revenue > 0 else 0,
-                    'Deckungsbeitrag 1': net_revenue - material_costs
-                }
-        except Exception as e:
-            logger.error(f"Fehler beim Verarbeiten der Daten für {single_date}: {str(e)}")
-    
-    if data:
-        df_overview = pd.DataFrame(data).T
-        st.dataframe(df_overview)
-    else:
-        logger.warning("Keine Daten für den ausgewählten Zeitraum verfügbar.")
-        st.warning("Keine Daten für den ausgewählten Zeitraum verfügbar.")
+                all_data.append(df)
+            current_date += timedelta(days=1)
+        
+        if all_data:
+            combined_df = pd.concat(all_data, ignore_index=True)
+            billbee_data, grouped_orders = load_and_process_billbee_data(combined_df)
+            material_costs = load_material_costs('material_costs.csv')
+            processed_data = calculate_material_costs(billbee_data, material_costs)
+            final_data = calculate_profit(processed_data)
+            
+            st.dataframe(final_data)
+            
+            st.subheader("Zusammenfassung:")
+            st.write(f"Gesamtanzahl der Bestellungen: {len(final_data)}")
+            st.write(f"Gesamtumsatz: {final_data['NetRevenue'].sum():.2f} EUR")
+            st.write(f"Gesamtmaterialkosten: {final_data['MaterialCost'].sum():.2f} EUR")
+            st.write(f"Gesamtversandkosten: {final_data['ShippingCost'].sum():.2f} EUR")
+            st.write(f"Gesamtgewinn: {final_data['Profit'].sum():.2f} EUR")
+        else:
+            st.warning("Keine Daten für den ausgewählten Zeitraum verfügbar.")
+    except Exception as e:
+        logger.error(f"Fehler beim Verarbeiten der Daten: {str(e)}")
+        st.error("Fehler beim Verarbeiten der Daten. Bitte überprüfen Sie die Logs für weitere Details.")
 
 def main():
     st.title("E-Commerce Profitabilitäts-App")
@@ -137,7 +136,6 @@ def main():
     if st.button("Daten von gestern abrufen"):
         fetch_yesterday_data()
     
-    # Add a date range picker for fetching data for a specific range
     col1, col2 = st.columns(2)
     with col1:
         start_date = st.date_input("Startdatum", datetime.now().date() - timedelta(days=7))
@@ -147,8 +145,8 @@ def main():
     if st.button("Daten für Zeitraum abrufen"):
         fetch_data_for_range(start_date, end_date)
     
-    display_overview_table()
-    manage_material_costs()
+    if st.button("Übersichtstabelle anzeigen"):
+        display_overview_table(start_date, end_date)
 
 if __name__ == "__main__":
     main()
