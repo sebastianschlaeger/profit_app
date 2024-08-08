@@ -1,10 +1,15 @@
 import streamlit as st
 from datetime import datetime, timedelta
+import logging
 from src.billbee_api import BillbeeAPI
 from src.data_processor import process_orders
 from src.inventory_management import load_supplier_deliveries, save_supplier_deliveries
 from src.s3_operations import save_to_s3, get_saved_dates, load_from_s3
 from src.s3_utils import get_s3_fs
+
+# Configure logging
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="E-Commerce Profitabilitäts-App", layout="wide")
 
@@ -18,38 +23,52 @@ billbee_api = BillbeeAPI(
 def fetch_yesterday_data():
     yesterday = datetime.now().date() - timedelta(days=1)
     if yesterday not in get_saved_dates():
-        orders_data = billbee_api.get_orders_for_date(yesterday)
-        df = process_orders(orders_data)
-        save_to_s3(df, yesterday)
-        st.success(f"Daten für {yesterday} erfolgreich abgerufen und gespeichert.")
+        try:
+            orders_data = billbee_api.get_orders_for_date(yesterday)
+            df = process_orders(orders_data)
+            save_to_s3(df, yesterday)
+            st.success(f"Daten für {yesterday} erfolgreich abgerufen und gespeichert.")
+        except Exception as e:
+            logger.error(f"Fehler beim Abrufen der Daten für {yesterday}: {str(e)}")
+            st.error(f"Fehler beim Abrufen der Daten für {yesterday}. Bitte überprüfen Sie die Logs für weitere Details.")
     else:
+        logger.warning(f"Daten für {yesterday} wurden bereits importiert.")
         st.info(f"Daten für {yesterday} wurden bereits importiert.")
 
 def manage_material_costs():
     st.subheader("Materialkosten verwalten")
     
-    deliveries = load_supplier_deliveries()
-    
-    edited_df = st.data_editor(
-        deliveries,
-        column_config={
-            "SKU": st.column_config.TextColumn("SKU"),
-            "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
-            "Date": st.column_config.DateColumn("Gültig ab Datum"),
-        },
-        num_rows="dynamic"
-    )
-    
-    if st.button("Änderungen speichern"):
-        save_supplier_deliveries(edited_df)
-        st.success("Änderungen wurden gespeichert.")
+    try:
+        deliveries = load_supplier_deliveries()
+        
+        edited_df = st.data_editor(
+            deliveries,
+            column_config={
+                "SKU": st.column_config.TextColumn("SKU"),
+                "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
+                "Date": st.column_config.DateColumn("Gültig ab Datum"),
+            },
+            num_rows="dynamic"
+        )
+        
+        if st.button("Änderungen speichern"):
+            save_supplier_deliveries(edited_df)
+            st.success("Änderungen wurden gespeichert.")
+    except Exception as e:
+        logger.error(f"Fehler beim Verwalten der Materialkosten: {str(e)}")
+        st.error("Fehler beim Verwalten der Materialkosten. Bitte überprüfen Sie die Logs für weitere Details.")
 
 def get_material_cost_for_date(sku, date):
-    deliveries = load_supplier_deliveries()
-    relevant_costs = deliveries[(deliveries['SKU'] == sku) & (deliveries['Date'] <= date)]
-    if relevant_costs.empty:
+    try:
+        deliveries = load_supplier_deliveries()
+        relevant_costs = deliveries[(deliveries['SKU'] == sku) & (deliveries['Date'] <= date)]
+        if relevant_costs.empty:
+            logger.warning(f"Keine Materialkosten gefunden für SKU {sku} am {date}")
+            return None
+        return relevant_costs.sort_values('Date', ascending=False).iloc[0]['Cost']
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen der Materialkosten für SKU {sku} am {date}: {str(e)}")
         return None
-    return relevant_costs.sort_values('Date', ascending=False).iloc[0]['Cost']
 
 def display_overview_table():
     st.subheader("Übersichtstabelle (Letzten 30 Tage)")
@@ -59,24 +78,28 @@ def display_overview_table():
     
     data = {}
     for single_date in (start_date + timedelta(n) for n in range(30)):
-        df = load_from_s3(single_date)
-        if df is not None:
-            gross_revenue = df['GrossAmount'].sum()
-            net_revenue = gross_revenue / 1.19  # Assuming 19% VAT
-            material_costs = df.apply(lambda row: get_material_cost_for_date(row['SKU'], single_date) * row['Quantity'], axis=1).sum()
-            
-            data[single_date] = {
-                'Umsatz Brutto': gross_revenue,
-                'Umsatz Netto': net_revenue,
-                'Materialkosten €': material_costs,
-                'Materialkosten %': (material_costs / net_revenue) * 100 if net_revenue > 0 else 0,
-                'Deckungsbeitrag 1': net_revenue - material_costs
-            }
+        try:
+            df = load_from_s3(single_date)
+            if df is not None:
+                gross_revenue = df['GrossAmount'].sum()
+                net_revenue = gross_revenue / 1.19  # Assuming 19% VAT
+                material_costs = df.apply(lambda row: get_material_cost_for_date(row['SKU'], single_date) * row['Quantity'], axis=1).sum()
+                
+                data[single_date] = {
+                    'Umsatz Brutto': gross_revenue,
+                    'Umsatz Netto': net_revenue,
+                    'Materialkosten €': material_costs,
+                    'Materialkosten %': (material_costs / net_revenue) * 100 if net_revenue > 0 else 0,
+                    'Deckungsbeitrag 1': net_revenue - material_costs
+                }
+        except Exception as e:
+            logger.error(f"Fehler beim Verarbeiten der Daten für {single_date}: {str(e)}")
     
     if data:
         df_overview = pd.DataFrame(data).T
         st.dataframe(df_overview)
     else:
+        logger.warning("Keine Daten für den ausgewählten Zeitraum verfügbar.")
         st.warning("Keine Daten für den ausgewählten Zeitraum verfügbar.")
 
 def main():
