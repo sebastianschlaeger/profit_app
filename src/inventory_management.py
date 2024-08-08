@@ -14,9 +14,8 @@ def load_material_costs():
             with s3.open(file_path, 'rb') as f:
                 df = pd.read_csv(f)
                 df['SKU'] = df['SKU'].astype(str)
-                df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
                 return df
-        return pd.DataFrame(columns=['SKU', 'Cost', 'Date'])
+        return pd.DataFrame(columns=['SKU', 'Cost'])
     except Exception as e:
         logger.error(f"Fehler beim Laden der Materialkostendaten: {str(e)}")
         raise
@@ -27,7 +26,6 @@ def save_material_costs(df):
     file_path = f"{bucket_name}/material_costs.csv"
     try:
         df['SKU'] = df['SKU'].astype(str)
-        df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
         with s3.open(file_path, 'w') as f:
             df.to_csv(f, index=False)
     except Exception as e:
