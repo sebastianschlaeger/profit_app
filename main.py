@@ -5,7 +5,7 @@ import pandas as pd
 from src.billbee_api import BillbeeAPI
 from src.data_processor import process_orders
 from src.inventory_management import load_material_costs, save_material_costs
-from src.s3_operations import save_to_s3, get_saved_dates, load_from_s3
+from src.s3_operations import save_to_s3, get_saved_dates, load_from_s3, save_daily_order_data
 from src.s3_utils import get_s3_fs
 
 # Configure logging
@@ -27,6 +27,7 @@ def fetch_yesterday_data():
         try:
             orders_data = billbee_api.get_orders_for_date(yesterday)
             df = process_orders(orders_data)
+            save_daily_order_data(df, yesterday)
             save_to_s3(df, yesterday)
             st.success(f"Daten für {yesterday} erfolgreich abgerufen und gespeichert.")
         except Exception as e:
