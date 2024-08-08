@@ -45,14 +45,23 @@ def get_saved_dates(days=30):
 def load_from_s3(date):
     s3 = get_s3_fs()
     bucket_name = st.secrets['aws']['S3_BUCKET_NAME']
-    filename = f"{bucket_name}/orders_{date.strftime('%Y-%m-%d')}.csv"
+    filename = f"daily_orders_{date.strftime('%Y-%m-%d')}.csv"
+    full_path = f"{bucket_name}/{filename}"
+    
+    logger.info(f"Versuche, Datei zu laden: {full_path}")
+    
     try:
-        if s3.exists(filename):
-            with s3.open(filename, 'rb') as f:
-                return pd.read_csv(f)
-        return None
+        if s3.exists(full_path):
+            logger.info(f"Datei gefunden: {full_path}")
+            with s3.open(full_path, 'rb') as f:
+                df = pd.read_csv(f)
+            logger.info(f"Datei erfolgreich geladen. Anzahl der Zeilen: {len(df)}")
+            return df
+        else:
+            logger.warning(f"Datei nicht gefunden: {full_path}")
+            return None
     except Exception as e:
-        logger.error(f"Fehler beim Laden der Daten aus S3: {str(e)}")
+        logger.error(f"Fehler beim Laden der Datei {full_path}: {str(e)}")
         raise
 
 def get_all_data_since_date(start_date):
