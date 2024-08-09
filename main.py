@@ -329,7 +329,22 @@ def main():
             display_overview_table(start_date, end_date)
     
     elif choice == "Materialkosten verwalten":
-        manage_material_costs()
+        st.subheader("Materialkosten verwalten")
+        
+        material_costs = load_material_costs()
+        
+        edited_df = st.data_editor(
+            material_costs,
+            column_config={
+                "SKU": st.column_config.TextColumn("SKU"),
+                "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
+            },
+            num_rows="dynamic"
+        )
+        
+        if st.button("Änderungen speichern"):
+            save_material_costs(edited_df)
+            st.success("Änderungen wurden gespeichert.")
 
 if __name__ == "__main__":
     main()
