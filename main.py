@@ -155,29 +155,7 @@ def display_overview_table(start_date, end_date):
                     st.warning("Die berechnete Übersicht ist leer.")
                     logger.warning("Berechnete Übersichtsdaten sind leer.")
                 else:
-                    # Neue Tabelle erstellen
-                    table_data = {
-                        'Kennzahl': ['Umsatz Brutto', 'Umsatz Netto', 'Materialkosten', 'Materialkosten %', 'Deckungsbeitrag 1']
-                    }
-                    
-                    for date in pd.date_range(start=start_date, end=end_date):
-                        date_str = date.strftime('%d.%m.%Y')
-                        day_data = overview_data[overview_data['Datum'] == date]
-                        if not day_data.empty:
-                            row = day_data.iloc[0]
-                            table_data[date_str] = [
-                                f"{row['Umsatz Brutto']:.2f}",
-                                f"{row['Umsatz Netto']:.2f}",
-                                f"{row['Materialkosten']:.2f}",
-                                f"{row['Materialkosten %']:.1f}%",
-                                f"{row['Deckungsbeitrag 1']:.2f}"
-                            ]
-                        else:
-                            table_data[date_str] = ['', '', '', '', '']
-                    
-                    df_table = pd.DataFrame(table_data)
-                    st.table(df_table)
-                    
+                    st.dataframe(overview_data)
                     display_summary(overview_data)
         else:
             st.warning(f"Keine Daten für den ausgewählten Zeitraum verfügbar.")
