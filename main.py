@@ -290,61 +290,69 @@ def fetch_and_process_data(date):
 def main():
     st.title("E-Commerce Profitabilitäts-App")
     
-    menu = ["Daten abrufen", "Übersicht anzeigen"]
-    choice = st.sidebar.selectbox("Menü", menu)
+    # Sidebar-Menü
+    st.sidebar.title("Navigation")
+    main_menu = st.sidebar.selectbox("Hauptmenü", ["Daten", "Übersicht", "Inventory Management"])
     
-    if choice == "Daten abrufen":
-        st.subheader("Daten abrufen")
-        if st.button("Daten von gestern abrufen"):
-            yesterday = datetime.now().date() - timedelta(days=1)
-            df = fetch_and_process_data(yesterday)
-            if df is not None:
-                st.write(df)
+    if main_menu == "Daten":
+        data_option = st.sidebar.radio("Daten Optionen", ["Daten von gestern abrufen", "Daten für Zeitraum abrufen"])
         
-        st.subheader("Daten für Zeitraum abrufen")
-        col1, col2 = st.columns(2)
-        with col1:
-            start_date = st.date_input("Startdatum", datetime.now().date() - timedelta(days=7))
-        with col2:
-            end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
-        
-        if st.button("Daten für Zeitraum abrufen"):
-            all_data = []
-            current_date = start_date
-            while current_date <= end_date:
-                df = fetch_and_process_data(current_date)
+        if data_option == "Daten von gestern abrufen":
+            st.subheader("Daten von gestern abrufen")
+            if st.button("Abrufen"):
+                yesterday = datetime.now().date() - timedelta(days=1)
+                df = fetch_and_process_data(yesterday)
                 if df is not None:
-                    all_data.append(df)
-                current_date += timedelta(days=1)
+                    st.write(df)
+        
+        elif data_option == "Daten für Zeitraum abrufen":
+            st.subheader("Daten für Zeitraum abrufen")
+            col1, col2 = st.columns(2)
+            with col1:
+                start_date = st.date_input("Startdatum", datetime.now().date() - timedelta(days=7))
+            with col2:
+                end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
             
-            if all_data:
-                combined_df = pd.concat(all_data, ignore_index=True)
-                st.write(combined_df)
+            if st.button("Daten abrufen"):
+                all_data = []
+                current_date = start_date
+                while current_date <= end_date:
+                    df = fetch_and_process_data(current_date)
+                    if df is not None:
+                        all_data.append(df)
+                    current_date += timedelta(days=1)
+                
+                if all_data:
+                    combined_df = pd.concat(all_data, ignore_index=True)
+                    st.write(combined_df)
     
-    elif choice == "Übersicht anzeigen":
+    elif main_menu == "Übersicht":
         st.subheader("Übersicht anzeigen")
         start_date = st.date_input("Startdatum", datetime.now().date() - timedelta(days=7))
         end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
         if st.button("Übersichtstabelle anzeigen"):
             display_overview_table(start_date, end_date)
     
-    elif choice == "Materialkosten verwalten":
-        st.subheader("Materialkosten verwalten")
+    elif main_menu == "Inventory Management":
+        inventory_option = st.sidebar.selectbox("Inventory Optionen", ["Materialkosten verwalten"])
         
-        material_costs = load_material_costs()
-        
-        edited_df = st.data_editor(
-            material_costs,
-            column_config={
-                "SKU": st.column_config.TextColumn("SKU"),
-                "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
-            },
-            num_rows="dynamic"
-        )
-        
-        if st.button("Änderungen speichern"):
-            save_material_costs(edited_df)
-            st.success("Änderungen wurden gespeichert.")
+        if inventory_option == "Materialkosten verwalten":
+            st.subheader("Materialkosten verwalten")
+            
+            material_costs = load_material_costs()
+            
+            edited_df = st.data_editor(
+                material_costs,
+                column_config={
+                    "SKU": st.column_config.TextColumn("SKU"),
+                    "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
+                },
+                num_rows="dynamic"
+            )
+            
+            if st.button("Änderungen speichern"):
+                save_material_costs(edited_df)
+                st.success("Änderungen wurden gespeichert.")
 
 if __name__ == "__main__":
     main()
