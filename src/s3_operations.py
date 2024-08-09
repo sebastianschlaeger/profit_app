@@ -2,26 +2,29 @@ import pandas as pd
 from src.s3_utils import get_s3_fs
 import logging
 import streamlit as st
+from io import StringIO
 
 logger = logging.getLogger(__name__)
 
 SALES_FILE = "all_sales_data_profit_app.csv"
 
-def save_to_s3(new_data, date):
+def save_to_s3(df, date):
     """Speichert neue Verkaufsdaten in S3."""
     try:
         s3 = get_s3_fs()
         bucket_name = st.secrets['aws']['S3_BUCKET_NAME']
-        full_path = f"{bucket_name}/{SALES_FILE}"
+        file_name = f"billbee_orders_{date.strftime('%Y-%m-%d')}.csv"
+        full_path = f"{bucket_name}/{file_name}"
         
-        if s3.exists(full_path):
-            existing_data = load_existing_data(s3, full_path)
-            combined_data = combine_data(existing_data, new_data, date)
-        else:
-            combined_data = prepare_new_data(new_data, date)
+        csv_buffer = StringIO()
+        df.to_csv(csv_buffer, index=False)
+        csv_buffer.seek(0)
         
-        save_combined_data(s3, full_path, combined_data)
-        return SALES_FILE
+        with s3.open(full_path, 'w') as f:
+            f.write(csv_buffer.getvalue())
+        
+        logger.info(f"CSV-Datei erfolgreich in S3 gespeichert: {full_path}")
+        return full_path
     except Exception as e:
         logger.error(f"Fehler beim Speichern in S3: {str(e)}")
         raise
@@ -45,8 +48,8 @@ def get_saved_dates(days=30):
 def load_from_s3(date):
     s3 = get_s3_fs()
     bucket_name = st.secrets['aws']['S3_BUCKET_NAME']
-    filename = f"daily_orders_{date.strftime('%Y-%m-%d')}.csv"
-    full_path = f"{bucket_name}/{filename}"
+    file_name = f"billbee_orders_{date.strftime('%Y-%m-%d')}.csv"
+    full_path = f"{bucket_name}/{file_name}"
     
     logger.info(f"Versuche, Datei zu laden: {full_path}")
     
