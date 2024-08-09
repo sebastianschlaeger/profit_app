@@ -142,16 +142,18 @@ def display_overview_table(start_date, end_date):
             logger.info(f"Gesamtanzahl der geladenen Datensätze: {len(combined_df)}")
             
             material_costs = load_material_costs()
+            fulfillment_costs = load_fulfillment_costs()
             logger.info(f"Anzahl der geladenen Materialkosten: {len(material_costs)}")
+            logger.info(f"Fulfillment-Kosten geladen: {fulfillment_costs.to_dict()}")
             
             if combined_df.empty:
                 st.warning("Die geladenen Daten sind leer.")
                 logger.warning("Combined DataFrame ist leer.")
-            elif material_costs.empty:
-                st.warning("Keine Materialkosten gefunden.")
-                logger.warning("Material costs DataFrame ist leer.")
+            elif material_costs.empty or fulfillment_costs.empty:
+                st.warning("Keine Material- oder Fulfillment-Kosten gefunden.")
+                logger.warning("Material costs oder Fulfillment costs DataFrame ist leer.")
             else:
-                overview_data = calculate_overview_data(combined_df, material_costs.set_index('SKU')['Cost'].to_dict())
+                overview_data = calculate_overview_data(combined_df, material_costs.set_index('SKU')['Cost'].to_dict(), fulfillment_costs)
                 
                 if overview_data.empty:
                     st.warning("Die berechnete Übersicht ist leer.")
@@ -210,7 +212,7 @@ def extract_skus_and_quantities(order_items):
         logger.error(f"Problematische order_items: {order_items}")
         return []
 
-def calculate_overview_data(billbee_data, material_costs):
+def calculate_overview_data(billbee_data, material_costs, fulfillment_costs):
     try:
         billbee_data['CreatedAt'] = pd.to_datetime(billbee_data['CreatedAt']).dt.date
         billbee_data['OrderItems'] = billbee_data['OrderItems'].apply(process_order_items)
@@ -221,17 +223,30 @@ def calculate_overview_data(billbee_data, material_costs):
         
         billbee_data['MaterialCost'] = billbee_data['OrderItems'].apply(calculate_material_cost)
         
+        # Berechne Fulfillment-Kosten
+        billbee_data['FulfillmentCost'] = (
+            fulfillment_costs['Auftragspauschale'].iloc[0] +
+            fulfillment_costs['SKU_Pick'].iloc[0] * billbee_data['OrderItems'].apply(lambda x: sum(quantity for _, quantity in x)) +
+            fulfillment_costs['Kartonage'].iloc[0]
+        )
+        billbee_data['ShippingCost'] = fulfillment_costs['Versandkosten'].iloc[0]
+        
         # Gruppiere die Daten nach Datum
         grouped = billbee_data.groupby('CreatedAt').agg({
             'TotalOrderPrice': 'sum',
             'TaxAmount': 'sum',
-            'MaterialCost': 'sum'
+            'MaterialCost': 'sum',
+            'FulfillmentCost': 'sum',
+            'ShippingCost': 'sum'
         }).reset_index()
         
         # Berechne die zusätzlichen Metriken
         grouped['UmsatzNetto'] = grouped['TotalOrderPrice'] - grouped['TaxAmount']
         grouped['MaterialkostenProzent'] = (grouped['MaterialCost'] / grouped['UmsatzNetto']) * 100
         grouped['Deckungsbeitrag1'] = grouped['UmsatzNetto'] - grouped['MaterialCost']
+        grouped['GesamtkostenFulfillment'] = grouped['FulfillmentCost'] + grouped['ShippingCost']
+        grouped['GesamtkostenFulfillmentProzent'] = (grouped['GesamtkostenFulfillment'] / grouped['UmsatzNetto']) * 100
+        grouped['Deckungsbeitrag2'] = grouped['Deckungsbeitrag1'] - grouped['GesamtkostenFulfillment']
         
         # Formatiere die Tabelle
         result = grouped.rename(columns={
@@ -240,13 +255,20 @@ def calculate_overview_data(billbee_data, material_costs):
             'UmsatzNetto': 'Umsatz Netto',
             'MaterialCost': 'Materialkosten',
             'MaterialkostenProzent': 'Materialkosten %',
-            'Deckungsbeitrag1': 'Deckungsbeitrag 1'
+            'Deckungsbeitrag1': 'Deckungsbeitrag 1',
+            'FulfillmentCost': 'Fulfillment-Kosten',
+            'ShippingCost': 'Versandkosten',
+            'GesamtkostenFulfillment': 'Gesamtkosten Fulfillment €',
+            'GesamtkostenFulfillmentProzent': 'Gesamtkosten Fulfillment %',
+            'Deckungsbeitrag2': 'Deckungsbeitrag 2'
         })
         
         # Runde die Zahlen
-        for col in ['Umsatz Brutto', 'Umsatz Netto', 'Materialkosten', 'Deckungsbeitrag 1']:
+        for col in ['Umsatz Brutto', 'Umsatz Netto', 'Materialkosten', 'Deckungsbeitrag 1', 
+                    'Fulfillment-Kosten', 'Versandkosten', 'Gesamtkosten Fulfillment €', 'Deckungsbeitrag 2']:
             result[col] = result[col].round(2)
         result['Materialkosten %'] = result['Materialkosten %'].round(1)
+        result['Gesamtkosten Fulfillment %'] = result['Gesamtkosten Fulfillment %'].round(1)
         
         return result
     except Exception as e:
