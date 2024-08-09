@@ -31,27 +31,23 @@ class BillbeeAPI:
         try:
             while True:
                 params['page'] = page
-                logger.info(f"Requesting page {page} for date {date}")
                 response = requests.get(endpoint, headers=headers, params=params, auth=(self.username, self.password))
                 response.raise_for_status()
                 data = response.json()
 
-                logger.info(f"Received {len(data['Data'])} orders on page {page}")
                 all_orders.extend(data['Data'])
 
-                logger.info(f"Current page: {data['Paging']['Page']}, Total pages: {data['Paging']['TotalPages']}")
                 if page >= data['Paging']['TotalPages']:
                     break
 
                 page += 1
 
             logger.info(f"Successfully retrieved {len(all_orders)} orders for date {date}")
-            logger.debug(f"Order IDs retrieved: {[order['Id'] for order in all_orders]}")
             return all_orders
 
         except requests.RequestException as e:
-            error_msg = f"Error in request to Billbee API: {str(e)}"
-            logger.error(error_msg, exc_info=True)
+            error_msg = f"Fehler bei der Anfrage an Billbee API: {str(e)}"
+            logger.error(error_msg)
             st.error(error_msg)
             raise
 
