@@ -162,8 +162,9 @@ def display_overview_table(start_date, end_date):
                     
                     for date in pd.date_range(start=start_date, end=end_date):
                         date_str = date.strftime('%d.%m.%Y')
-                        if date in overview_data['Datum'].values:
-                            row = overview_data[overview_data['Datum'] == date].iloc[0]
+                        day_data = overview_data[overview_data['Datum'] == date]
+                        if not day_data.empty:
+                            row = day_data.iloc[0]
                             table_data[date_str] = [
                                 f"{row['Umsatz Brutto']:.2f}",
                                 f"{row['Umsatz Netto']:.2f}",
@@ -195,6 +196,7 @@ def display_overview_table(start_date, end_date):
         logger.error(f"Fehler beim Verarbeiten der Daten: {str(e)}", exc_info=True)
         st.error(f"Fehler beim Verarbeiten der Daten: {str(e)}")
         st.error("Bitte überprüfen Sie die Logs für weitere Details.")
+
 
 def manage_material_costs():
     st.subheader("Materialkosten verwalten")
