@@ -8,6 +8,8 @@ from src.billbee_api import BillbeeAPI
 from src.s3_operations import save_to_s3, get_saved_dates, load_from_s3, save_daily_order_data
 from src.s3_utils import get_s3_fs
 from src.data_processor import process_orders, create_dataframe, save_to_csv
+from src.fulfillment_costs import load_fulfillment_costs, save_fulfillment_costs
+
 
 # Configure logging
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -284,6 +286,26 @@ def fetch_and_process_data(date):
         st.error(f"Fehler beim Abrufen und Verarbeiten der Daten für {date}. Bitte überprüfen Sie die Logs für weitere Details.")
         return None
 
+def manage_fulfillment_costs():
+    st.subheader("Fulfillment-Kosten verwalten")
+    
+    costs = load_fulfillment_costs()
+    
+    edited_df = st.data_editor(
+        costs,
+        column_config={
+            "Auftragspauschale": st.column_config.NumberColumn("Auftragspauschale", min_value=0, step=0.01),
+            "SKU_Pick": st.column_config.NumberColumn("SKU Pick", min_value=0, step=0.01),
+            "Kartonage": st.column_config.NumberColumn("Kartonage", min_value=0, step=0.01),
+            "Versandkosten": st.column_config.NumberColumn("Versandkosten", min_value=0, step=0.01),
+        },
+        num_rows="dynamic"
+    )
+    
+    if st.button("Änderungen speichern"):
+        save_fulfillment_costs(edited_df)
+        st.success("Änderungen wurden gespeichert.")
+
 def main():
     st.title("E-Commerce Profitabilitäts-App")
     
@@ -329,6 +351,14 @@ def main():
         end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
         if st.button("Übersichtstabelle anzeigen"):
             display_overview_table(start_date, end_date)
+
+    elif main_menu == "Inventory Management":
+        inventory_option = st.sidebar.selectbox("Inventory Optionen", ["Materialkosten verwalten", "Fulfillment-Kosten verwalten"])
+        
+        if inventory_option == "Materialkosten verwalten":
+            manage_material_costs()
+        elif inventory_option == "Fulfillment-Kosten verwalten":
+            manage_fulfillment_costs()
     
     elif main_menu == "Inventory Management":
         inventory_option = st.sidebar.selectbox("Inventory Optionen", ["Materialkosten verwalten"])
