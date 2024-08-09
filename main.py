@@ -268,19 +268,38 @@ def display_summary(overview_data):
     st.write(f"Materialkosten %: {total_material_cost_percentage:.2f}%")
     st.write(f"Deckungsbeitrag 1: {total_contribution_margin:.2f} EUR")
 
+def fetch_and_process_data(date):
+    try:
+        orders_data = billbee_api.get_orders_for_date(date)
+        processed_orders = process_orders(orders_data)
+        df = create_dataframe(processed_orders)
+        
+        filename = f"billbee_orders_{date.strftime('%Y-%m-%d')}.csv"
+        save_to_csv(df, filename)
+        
+        # Save to S3
+        s3_path = save_to_s3(df, date)
+        
+        st.success(f"Daten für {date} erfolgreich abgerufen, verarbeitet und gespeichert.")
+        return df
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen und Verarbeiten der Daten für {date}: {str(e)}")
+        st.error(f"Fehler beim Abrufen und Verarbeiten der Daten für {date}. Bitte überprüfen Sie die Logs für weitere Details.")
+        return None
+
 def main():
     st.title("E-Commerce Profitabilitäts-App")
     
-    # Laden der Materialkosten beim Start der App
-    material_costs = load_material_costs()
-    
-    menu = ["Daten abrufen", "Übersicht anzeigen", "Materialkosten verwalten"]
+    menu = ["Daten abrufen", "Übersicht anzeigen"]
     choice = st.sidebar.selectbox("Menü", menu)
     
     if choice == "Daten abrufen":
         st.subheader("Daten abrufen")
         if st.button("Daten von gestern abrufen"):
-            fetch_yesterday_data()
+            yesterday = datetime.now().date() - timedelta(days=1)
+            df = fetch_and_process_data(yesterday)
+            if df is not None:
+                st.write(df)
         
         st.subheader("Daten für Zeitraum abrufen")
         col1, col2 = st.columns(2)
@@ -290,7 +309,17 @@ def main():
             end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
         
         if st.button("Daten für Zeitraum abrufen"):
-            fetch_data_for_range(start_date, end_date)
+            all_data = []
+            current_date = start_date
+            while current_date <= end_date:
+                df = fetch_and_process_data(current_date)
+                if df is not None:
+                    all_data.append(df)
+                current_date += timedelta(days=1)
+            
+            if all_data:
+                combined_df = pd.concat(all_data, ignore_index=True)
+                st.write(combined_df)
     
     elif choice == "Übersicht anzeigen":
         st.subheader("Übersicht anzeigen")
