@@ -7,8 +7,16 @@ logger = logging.getLogger(__name__)
 def process_sku(sku):
     """
     Process the SKU to remove everything after the hyphen (if present).
+    Handle None values and non-string inputs.
     """
-    return sku.split('-')[0] if '-' in sku else sku
+    if sku is None:
+        return ""
+    try:
+        sku_str = str(sku)
+        return sku_str.split('-')[0] if '-' in sku_str else sku_str
+    except Exception as e:
+        logger.warning(f"Error processing SKU: {e}")
+        return ""
 
 def process_orders(orders_data):
     processed_orders = []
@@ -28,14 +36,14 @@ def process_orders(orders_data):
 
         for item in order["OrderItems"]:
             order_item = {
-                "SKU": process_sku(item["Product"]["SKU"]),  # Process SKU here
+                "SKU": process_sku(item["Product"].get("SKU")),  # Use .get() method
                 "Quantity": item["Quantity"],
                 "TotalPrice": item["TotalPrice"],
-                "Weight": item["Product"]["Weight"] or 0  # Use 0 if Weight is None
+                "Weight": item["Product"].get("Weight", 0)  # Use .get() with default value
             }
             processed_order["OrderItems"].append(order_item)
             processed_order["TotalOrderPrice"] += item["TotalPrice"]
-            processed_order["TotalOrderWeight"] += (item["Product"]["Weight"] or 0) * item["Quantity"]
+            processed_order["TotalOrderWeight"] += order_item["Weight"] * item["Quantity"]
 
         processed_orders.append(processed_order)
 
