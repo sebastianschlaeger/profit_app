@@ -10,7 +10,7 @@ from src.s3_utils import get_s3_fs
 from src.data_processor import process_orders, create_dataframe, save_to_csv
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="E-Commerce Profitabilitäts-App", layout="wide")
@@ -266,66 +266,53 @@ def display_summary(overview_data):
 
 def fetch_and_process_data(date):
     try:
-        logger.info(f"Fetching orders for date: {date}")
         orders_data = billbee_api.get_orders_for_date(date)
-        logger.info(f"Retrieved {len(orders_data)} orders from Billbee API")
-        
-        logger.info("Processing orders")
         processed_orders = process_orders(orders_data)
-        logger.info(f"Processed {len(processed_orders)} orders")
-        
         df = create_dataframe(processed_orders)
-        logger.info(f"Created DataFrame with {len(df)} rows")
         
         filename = f"billbee_orders_{date.strftime('%Y-%m-%d')}.csv"
         save_to_csv(df, filename)
-        logger.info(f"Saved data to CSV: {filename}")
         
         # Save to S3
         s3_path = save_to_s3(df, date)
-        logger.info(f"Saved data to S3: {s3_path}")
         
-        st.success(f"Data for {date} successfully retrieved, processed, and saved.")
+        st.success(f"Daten für {date} erfolgreich abgerufen, verarbeitet und gespeichert.")
         return df
     except Exception as e:
-        logger.error(f"Error fetching and processing data for {date}: {str(e)}", exc_info=True)
-        st.error(f"Error fetching and processing data for {date}. Please check the logs for more details.")
+        logger.error(f"Fehler beim Abrufen und Verarbeiten der Daten für {date}: {str(e)}")
+        st.error(f"Fehler beim Abrufen und Verarbeiten der Daten für {date}. Bitte überprüfen Sie die Logs für weitere Details.")
         return None
 
 def main():
     st.title("E-Commerce Profitabilitäts-App")
     
-    # Sidebar menu
+    # Sidebar-Menü
     st.sidebar.title("Navigation")
-    main_menu = st.sidebar.selectbox("Main Menu", ["Data", "Overview", "Inventory Management"])
+    main_menu = st.sidebar.selectbox("Hauptmenü", ["Daten", "Übersicht", "Inventory Management"])
     
-    if main_menu == "Data":
-        data_option = st.sidebar.radio("Data Options", ["Fetch yesterday's data", "Fetch data for date range"])
+    if main_menu == "Daten":
+        data_option = st.sidebar.radio("Daten Optionen", ["Daten von gestern abrufen", "Daten für Zeitraum abrufen"])
         
-        if data_option == "Fetch yesterday's data":
-            st.subheader("Fetch yesterday's data")
-            if st.button("Fetch"):
+        if data_option == "Daten von gestern abrufen":
+            st.subheader("Daten von gestern abrufen")
+            if st.button("Abrufen"):
                 yesterday = datetime.now().date() - timedelta(days=1)
-                logger.info(f"Fetching data for yesterday: {yesterday}")
                 df = fetch_and_process_data(yesterday)
                 if df is not None:
                     st.write(df)
-                    logger.info(f"Displayed DataFrame with {len(df)} rows")
         
-        elif data_option == "Fetch data for date range":
-            st.subheader("Fetch data for date range")
+        elif data_option == "Daten für Zeitraum abrufen":
+            st.subheader("Daten für Zeitraum abrufen")
             col1, col2 = st.columns(2)
             with col1:
-                start_date = st.date_input("Start date", datetime.now().date() - timedelta(days=7))
+                start_date = st.date_input("Startdatum", datetime.now().date() - timedelta(days=7))
             with col2:
-                end_date = st.date_input("End date", datetime.now().date() - timedelta(days=1))
+                end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
             
-            if st.button("Fetch data"):
-                logger.info(f"Fetching data for date range: {start_date} to {end_date}")
+            if st.button("Daten abrufen"):
                 all_data = []
                 current_date = start_date
                 while current_date <= end_date:
-                    logger.info(f"Processing date: {current_date}")
                     df = fetch_and_process_data(current_date)
                     if df is not None:
                         all_data.append(df)
@@ -334,9 +321,6 @@ def main():
                 if all_data:
                     combined_df = pd.concat(all_data, ignore_index=True)
                     st.write(combined_df)
-                    logger.info(f"Displayed combined DataFrame with {len(combined_df)} rows")
-                else:
-                    logger.warning("No data retrieved for the specified date range")
     
     elif main_menu == "Übersicht":
         st.subheader("Übersicht anzeigen")
