@@ -2,6 +2,9 @@ import requests
 from datetime import datetime, timedelta
 import streamlit as st
 import logging
+import pandas as pd
+import json
+import csv
 
 logger = logging.getLogger(__name__)
 
@@ -51,20 +54,62 @@ class BillbeeAPI:
             st.error(error_msg)
             raise
 
-    def get_orders_for_date_range(self, start_date, end_date):
-        all_orders = []
-        current_date = start_date
+def process_orders(orders_data):
+    processed_orders = []
+    for order in orders_data:
+        processed_order = {
+            "BillbeeID": order["BillBeeOrderId"],
+            "OrderItems": [],
+            "Platform": order["Seller"]["Platform"],
+            "CustomerCountry": order["ShippingAddress"]["CountryISO2"],
+            "TotalOrderPrice": 0,
+            "TotalOrderWeight": 0,
+            "Currency": order["Currency"],
+            "CreatedAt": order["CreatedAt"].split("T")[0],
+            "TaxAmount": sum(item["TaxAmount"] for item in order["OrderItems"]),
+            "TotalCost": order["TotalCost"]
+        }
 
-        while current_date <= end_date:
-            try:
-                daily_orders = self.get_orders_for_date(current_date)
-                all_orders.extend(daily_orders)
-                current_date += timedelta(days=1)
-            except Exception as e:
-                logger.error(f"Fehler beim Abrufen der Bestellungen für {current_date}: {str(e)}")
-                st.error(f"Fehler beim Abrufen der Bestellungen für {current_date}. Bitte überprüfen Sie die Logs für weitere Details.")
-                raise
+        for item in order["OrderItems"]:
+            order_item = {
+                "SKU": item["Product"]["SKU"],
+                "Quantity": item["Quantity"],
+                "TotalPrice": item["TotalPrice"],
+                "Weight": item["Product"]["Weight"]
+            }
+            processed_order["OrderItems"].append(order_item)
+            processed_order["TotalOrderPrice"] += item["TotalPrice"]
+            processed_order["TotalOrderWeight"] += item["Product"]["Weight"] * item["Quantity"]
 
-        return all_orders
+        processed_orders.append(processed_order)
 
-billbee_api = BillbeeAPI()
+    return processed_orders
+
+def save_to_csv(processed_orders, filename):
+    with open(filename, 'w', newline='') as csvfile:
+        fieldnames = ["BillbeeID", "Platform", "CustomerCountry", "TotalOrderPrice", "TotalOrderWeight", "Currency", "CreatedAt", "TaxAmount", "TotalCost", "OrderItems"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()
+        for order in processed_orders:
+            order_copy = order.copy()
+            order_copy["OrderItems"] = json.dumps(order_copy["OrderItems"])
+            writer.writerow(order_copy)
+
+def main():
+    billbee_api = BillbeeAPI()
+    
+    # Beispiel: Abrufen der Daten für gestern
+    yesterday = datetime.now().date() - timedelta(days=1)
+    orders_data = billbee_api.get_orders_for_date(yesterday)
+    
+    processed_orders = process_orders(orders_data)
+    
+    # Speichern der verarbeiteten Daten in einer CSV-Datei
+    filename = f"billbee_orders_{yesterday.strftime('%Y-%m-%d')}.csv"
+    save_to_csv(processed_orders, filename)
+    
+    logger.info(f"Processed orders saved to {filename}")
+
+if __name__ == "__main__":
+    main()
