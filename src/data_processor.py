@@ -4,6 +4,12 @@ import json
 
 logger = logging.getLogger(__name__)
 
+def process_sku(sku):
+    """
+    Process the SKU to remove everything after the hyphen (if present).
+    """
+    return sku.split('-')[0] if '-' in sku else sku
+
 def process_orders(orders_data):
     processed_orders = []
     for order in orders_data:
@@ -22,7 +28,7 @@ def process_orders(orders_data):
 
         for item in order["OrderItems"]:
             order_item = {
-                "SKU": item["Product"]["SKU"],
+                "SKU": process_sku(item["Product"]["SKU"]),  # Process SKU here
                 "Quantity": item["Quantity"],
                 "TotalPrice": item["TotalPrice"],
                 "Weight": item["Product"]["Weight"] or 0  # Use 0 if Weight is None
