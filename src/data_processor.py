@@ -25,11 +25,11 @@ def process_orders(orders_data):
                 "SKU": item["Product"]["SKU"],
                 "Quantity": item["Quantity"],
                 "TotalPrice": item["TotalPrice"],
-                "Weight": item["Product"]["Weight"]
+                "Weight": item["Product"]["Weight"] or 0  # Use 0 if Weight is None
             }
             processed_order["OrderItems"].append(order_item)
             processed_order["TotalOrderPrice"] += item["TotalPrice"]
-            processed_order["TotalOrderWeight"] += item["Product"]["Weight"] * item["Quantity"]
+            processed_order["TotalOrderWeight"] += (item["Product"]["Weight"] or 0) * item["Quantity"]
 
         processed_orders.append(processed_order)
 
