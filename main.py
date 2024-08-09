@@ -9,6 +9,7 @@ from src.s3_operations import save_to_s3, get_saved_dates, load_from_s3, save_da
 from src.s3_utils import get_s3_fs
 from src.data_processor import process_orders, create_dataframe, save_to_csv
 from src.fulfillment_costs import load_fulfillment_costs, save_fulfillment_costs
+from src.transaction_costs import load_transaction_costs, save_transaction_costs
 
 
 # Configure logging
@@ -143,17 +144,19 @@ def display_overview_table(start_date, end_date):
             
             material_costs = load_material_costs()
             fulfillment_costs = load_fulfillment_costs()
+            transaction_costs = load_transaction_costs()
             logger.info(f"Anzahl der geladenen Materialkosten: {len(material_costs)}")
             logger.info(f"Fulfillment-Kosten geladen: {fulfillment_costs.to_dict()}")
+            logger.info(f"Transaktionskosten geladen: {transaction_costs.to_dict()}")
             
             if combined_df.empty:
                 st.warning("Die geladenen Daten sind leer.")
                 logger.warning("Combined DataFrame ist leer.")
-            elif material_costs.empty or fulfillment_costs.empty:
-                st.warning("Keine Material- oder Fulfillment-Kosten gefunden.")
-                logger.warning("Material costs oder Fulfillment costs DataFrame ist leer.")
+            elif material_costs.empty or fulfillment_costs.empty or transaction_costs.empty:
+                st.warning("Keine Material-, Fulfillment- oder Transaktionskosten gefunden.")
+                logger.warning("Material costs, Fulfillment costs oder Transaction costs DataFrame ist leer.")
             else:
-                overview_data = calculate_overview_data(combined_df, material_costs.set_index('SKU')['Cost'].to_dict(), fulfillment_costs)
+                overview_data = calculate_overview_data(combined_df, material_costs.set_index('SKU')['Cost'].to_dict(), fulfillment_costs, transaction_costs)
                 
                 if overview_data.empty:
                     st.warning("Die berechnete Übersicht ist leer.")
@@ -212,7 +215,7 @@ def extract_skus_and_quantities(order_items):
         logger.error(f"Problematische order_items: {order_items}")
         return []
 
-def calculate_overview_data(billbee_data, material_costs, fulfillment_costs):
+def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, transaction_costs):
     try:
         billbee_data['CreatedAt'] = pd.to_datetime(billbee_data['CreatedAt']).dt.date
         billbee_data['OrderItems'] = billbee_data['OrderItems'].apply(process_order_items)
@@ -231,13 +234,18 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs):
         )
         billbee_data['ShippingCost'] = fulfillment_costs['Versandkosten'].iloc[0]
         
+        # Berechne Transaktionskosten
+        transaction_cost_dict = dict(zip(transaction_costs['Platform'], transaction_costs['TransactionCostPercent']))
+        billbee_data['TransactionCost'] = billbee_data.apply(lambda row: row['TotalOrderPrice'] * transaction_cost_dict.get(row['Platform'], 0) / 100, axis=1)
+        
         # Gruppiere die Daten nach Datum
         grouped = billbee_data.groupby('CreatedAt').agg({
             'TotalOrderPrice': 'sum',
             'TaxAmount': 'sum',
             'MaterialCost': 'sum',
             'FulfillmentCost': 'sum',
-            'ShippingCost': 'sum'
+            'ShippingCost': 'sum',
+            'TransactionCost': 'sum'
         }).reset_index()
         
         # Berechne die zusätzlichen Metriken
@@ -246,7 +254,8 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs):
         grouped['Deckungsbeitrag1'] = grouped['UmsatzNetto'] - grouped['MaterialCost']
         grouped['GesamtkostenFulfillment'] = grouped['FulfillmentCost'] + grouped['ShippingCost']
         grouped['GesamtkostenFulfillmentProzent'] = (grouped['GesamtkostenFulfillment'] / grouped['UmsatzNetto']) * 100
-        grouped['Deckungsbeitrag2'] = grouped['Deckungsbeitrag1'] - grouped['GesamtkostenFulfillment']
+        grouped['TransaktionskostenProzent'] = (grouped['TransactionCost'] / grouped['UmsatzNetto']) * 100
+        grouped['Deckungsbeitrag2'] = grouped['Deckungsbeitrag1'] - grouped['GesamtkostenFulfillment'] - grouped['TransactionCost']
         
         # Formatiere die Tabelle
         result = grouped.rename(columns={
@@ -260,15 +269,18 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs):
             'ShippingCost': 'Versandkosten',
             'GesamtkostenFulfillment': 'Gesamtkosten Fulfillment €',
             'GesamtkostenFulfillmentProzent': 'Gesamtkosten Fulfillment %',
+            'TransactionCost': 'Transaktionskosten',
+            'TransaktionskostenProzent': 'Transaktionskosten %',
             'Deckungsbeitrag2': 'Deckungsbeitrag 2'
         })
         
         # Runde die Zahlen
         for col in ['Umsatz Brutto', 'Umsatz Netto', 'Materialkosten', 'Deckungsbeitrag 1', 
-                    'Fulfillment-Kosten', 'Versandkosten', 'Gesamtkosten Fulfillment €', 'Deckungsbeitrag 2']:
+                    'Fulfillment-Kosten', 'Versandkosten', 'Gesamtkosten Fulfillment €', 
+                    'Transaktionskosten', 'Deckungsbeitrag 2']:
             result[col] = result[col].round(2)
-        result['Materialkosten %'] = result['Materialkosten %'].round(1)
-        result['Gesamtkosten Fulfillment %'] = result['Gesamtkosten Fulfillment %'].round(1)
+        for col in ['Materialkosten %', 'Gesamtkosten Fulfillment %', 'Transaktionskosten %']:
+            result[col] = result[col].round(1)
         
         return result
     except Exception as e:
@@ -307,6 +319,25 @@ def fetch_and_process_data(date):
         logger.error(f"Fehler beim Abrufen und Verarbeiten der Daten für {date}: {str(e)}")
         st.error(f"Fehler beim Abrufen und Verarbeiten der Daten für {date}. Bitte überprüfen Sie die Logs für weitere Details.")
         return None
+
+def manage_transaction_costs():
+    st.subheader("Transaktionskosten verwalten")
+    
+    costs = load_transaction_costs()
+    
+    edited_df = st.data_editor(
+        costs,
+        column_config={
+            "Platform": st.column_config.TextColumn("Plattform"),
+            "TransactionCostPercent": st.column_config.NumberColumn("Transaktionskosten %", min_value=0, max_value=100, step=0.01),
+        },
+        num_rows="dynamic"
+    )
+    
+    if st.button("Änderungen speichern"):
+        save_transaction_costs(edited_df)
+        st.success("Änderungen wurden gespeichert.")
+
 
 def manage_fulfillment_costs():
     st.subheader("Fulfillment-Kosten verwalten")
@@ -373,35 +404,20 @@ def main():
         end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
         if st.button("Übersichtstabelle anzeigen"):
             display_overview_table(start_date, end_date)
-
+    
     elif main_menu == "Inventory Management":
-        inventory_option = st.sidebar.selectbox("Inventory Optionen", ["Materialkosten verwalten", "Fulfillment-Kosten verwalten"])
+        inventory_option = st.sidebar.selectbox("Inventory Optionen", [
+            "Materialkosten verwalten",
+            "Fulfillment-Kosten verwalten",
+            "Transaktionskosten verwalten"
+        ])
         
         if inventory_option == "Materialkosten verwalten":
             manage_material_costs()
         elif inventory_option == "Fulfillment-Kosten verwalten":
             manage_fulfillment_costs()
-    
-    elif main_menu == "Inventory Management":
-        inventory_option = st.sidebar.selectbox("Inventory Optionen", ["Materialkosten verwalten"])
-        
-        if inventory_option == "Materialkosten verwalten":
-            st.subheader("Materialkosten verwalten")
-            
-            material_costs = load_material_costs()
-            
-            edited_df = st.data_editor(
-                material_costs,
-                column_config={
-                    "SKU": st.column_config.TextColumn("SKU"),
-                    "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
-                },
-                num_rows="dynamic"
-            )
-            
-            if st.button("Änderungen speichern"):
-                save_material_costs(edited_df)
-                st.success("Änderungen wurden gespeichert.")
+        elif inventory_option == "Transaktionskosten verwalten":
+            manage_transaction_costs()
 
 if __name__ == "__main__":
     main()
