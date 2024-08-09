@@ -292,14 +292,34 @@ def display_summary(overview_data):
     total_net_revenue = overview_data['Umsatz Netto'].sum()
     total_material_cost = overview_data['Materialkosten'].sum()
     total_material_cost_percentage = (total_material_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
-    total_contribution_margin = overview_data['Deckungsbeitrag 1'].sum()
+    total_contribution_margin_1 = overview_data['Deckungsbeitrag 1'].sum()
+    total_fulfillment_cost = overview_data['Gesamtkosten Fulfillment €'].sum()
+    total_fulfillment_cost_percentage = (total_fulfillment_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
+    total_transaction_cost = overview_data['Transaktionskosten'].sum()
+    total_transaction_cost_percentage = (total_transaction_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
+    total_contribution_margin_2 = overview_data['Deckungsbeitrag 2'].sum()
     
     st.subheader("Zusammenfassung:")
-    st.write(f"Umsatz Brutto: {total_gross_revenue:.2f} EUR")
-    st.write(f"Umsatz Netto: {total_net_revenue:.2f} EUR")
-    st.write(f"Materialkosten: {total_material_cost:.2f} EUR")
-    st.write(f"Materialkosten %: {total_material_cost_percentage:.1f}%")
-    st.write(f"Deckungsbeitrag 1: {total_contribution_margin:.2f} EUR")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write(f"Umsatz Brutto: {total_gross_revenue:.2f} EUR")
+        st.write(f"Umsatz Netto: {total_net_revenue:.2f} EUR")
+        st.write(f"Materialkosten: {total_material_cost:.2f} EUR ({total_material_cost_percentage:.1f}%)")
+        st.write(f"Deckungsbeitrag 1: {total_contribution_margin_1:.2f} EUR")
+    
+    with col2:
+        st.write(f"Fulfillment-Kosten: {total_fulfillment_cost:.2f} EUR ({total_fulfillment_cost_percentage:.1f}%)")
+        st.write(f"Transaktionskosten: {total_transaction_cost:.2f} EUR ({total_transaction_cost_percentage:.1f}%)")
+        st.write(f"Deckungsbeitrag 2: {total_contribution_margin_2:.2f} EUR")
+    
+    # Berechnung der Margen
+    db1_margin = (total_contribution_margin_1 / total_net_revenue) * 100 if total_net_revenue != 0 else 0
+    db2_margin = (total_contribution_margin_2 / total_net_revenue) * 100 if total_net_revenue != 0 else 0
+    
+    st.write("---")
+    st.write(f"DB1 Marge: {db1_margin:.1f}%")
+    st.write(f"DB2 Marge: {db2_margin:.1f}%")
 
 def fetch_and_process_data(date):
     try:
