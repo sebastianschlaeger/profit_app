@@ -1,57 +1,52 @@
 import pandas as pd
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
-def extract_billbee_data(order):
-    return {
-        "OrderId": order["Id"],
-        "OrderNumber": order["OrderNumber"],
-        "CreatedAt": order["CreatedAt"],
-        "TotalCost": order["TotalCost"],
-        "ShippingCost": order["ShippingCost"],
-        "Currency": order["Currency"],
-        "PaymentMethod": order["PaymentMethod"],
-        "OrderItems": [{
-            "ProductId": item["Product"]["Id"],
-            "SKU": item["Product"]["SKU"],
-            "Quantity": item["Quantity"],
-            "TotalPrice": item["TotalPrice"],
-            "TaxAmount": item["TaxAmount"],
-        } for item in order["OrderItems"]],
-        "ShippingAddress": {
-            "Country": order["ShippingAddress"]["Country"],
-            "CountryISO2": order["ShippingAddress"]["CountryISO2"],
-        },
-        "ShippingProviderId": order["ShippingProviderId"],
-        "ShippingProviderProductId": order["ShippingProviderProductId"],
-    }
-
 def process_orders(orders_data):
-    try:
-        processed_data = []
-        for order in orders_data:
-            extracted_order = extract_billbee_data(order)
-            for item in extracted_order['OrderItems']:
-                processed_data.append({
-                    'OrderId': extracted_order['OrderId'],
-                    'OrderNumber': extracted_order['OrderNumber'],
-                    'CreatedAt': extracted_order['CreatedAt'],
-                    'TotalCost': extracted_order['TotalCost'],
-                    'ShippingCost': extracted_order['ShippingCost'],
-                    'Currency': extracted_order['Currency'],
-                    'PaymentMethod': extracted_order['PaymentMethod'],
-                    'ProductId': item['ProductId'],
-                    'SKU': item['SKU'],
-                    'Quantity': item['Quantity'],
-                    'TotalPrice': item['TotalPrice'],
-                    'TaxAmount': item['TaxAmount'],
-                    'ShippingCountry': extracted_order['ShippingAddress']['Country'],
-                    'ShippingCountryISO2': extracted_order['ShippingAddress']['CountryISO2'],
-                    'ShippingProviderId': extracted_order['ShippingProviderId'],
-                    'ShippingProviderProductId': extracted_order['ShippingProviderProductId'],
-                })
-        return pd.DataFrame(processed_data)
-    except Exception as e:
-        logger.error(f"Fehler beim Verarbeiten der Bestelldaten: {str(e)}")
-        raise
+    processed_orders = []
+    for order in orders_data:
+        processed_order = {
+            "BillbeeID": order["BillBeeOrderId"],
+            "OrderItems": [],
+            "Platform": order["Seller"]["Platform"],
+            "CustomerCountry": order["ShippingAddress"]["CountryISO2"],
+            "TotalOrderPrice": 0,
+            "TotalOrderWeight": 0,
+            "Currency": order["Currency"],
+            "CreatedAt": order["CreatedAt"].split("T")[0],
+            "TaxAmount": sum(item["TaxAmount"] for item in order["OrderItems"]),
+            "TotalCost": order["TotalCost"]
+        }
+
+        for item in order["OrderItems"]:
+            order_item = {
+                "SKU": item["Product"]["SKU"],
+                "Quantity": item["Quantity"],
+                "TotalPrice": item["TotalPrice"],
+                "Weight": item["Product"]["Weight"]
+            }
+            processed_order["OrderItems"].append(order_item)
+            processed_order["TotalOrderPrice"] += item["TotalPrice"]
+            processed_order["TotalOrderWeight"] += item["Product"]["Weight"] * item["Quantity"]
+
+        processed_orders.append(processed_order)
+
+    return processed_orders
+
+def prepare_data_for_csv(processed_orders):
+    csv_data = []
+    for order in processed_orders:
+        order_copy = order.copy()
+        order_copy["OrderItems"] = json.dumps(order_copy["OrderItems"])
+        csv_data.append(order_copy)
+    return csv_data
+
+def create_dataframe(processed_orders):
+    df = pd.DataFrame(prepare_data_for_csv(processed_orders))
+    return df
+
+def save_to_csv(df, filename):
+    df.to_csv(filename, index=False)
+    logger.info(f"Data saved to {filename}")
