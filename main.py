@@ -10,6 +10,7 @@ from src.s3_utils import get_s3_fs
 from src.data_processor import process_orders, create_dataframe, save_to_csv
 from src.fulfillment_costs import load_fulfillment_costs, save_fulfillment_costs
 from src.transaction_costs import load_transaction_costs, save_transaction_costs
+from src.marketing_costs import load_marketing_costs, save_marketing_costs
 
 
 # Configure logging
@@ -379,6 +380,27 @@ def manage_fulfillment_costs():
         save_fulfillment_costs(edited_df)
         st.success("Änderungen wurden gespeichert.")
 
+def manage_marketing_costs():
+    st.subheader("Marketingkosten verwalten")
+    
+    costs = load_marketing_costs()
+    
+    edited_df = st.data_editor(
+        costs,
+        column_config={
+            "Date": st.column_config.DateColumn("Datum"),
+            "Google Ads": st.column_config.NumberColumn("Google Ads", min_value=0, step=0.01),
+            "Amazon Ads": st.column_config.NumberColumn("Amazon Ads", min_value=0, step=0.01),
+            "Ebay Ads": st.column_config.NumberColumn("Ebay Ads", min_value=0, step=0.01),
+            "Kaufland Ads": st.column_config.NumberColumn("Kaufland Ads", min_value=0, step=0.01),
+        },
+        num_rows="dynamic"
+    )
+    
+    if st.button("Änderungen speichern"):
+        save_marketing_costs(edited_df)
+        st.success("Änderungen wurden gespeichert.")
+
 def main():
     st.title("E-Commerce Profitabilitäts-App")
     
@@ -429,7 +451,8 @@ def main():
         inventory_option = st.sidebar.selectbox("Inventory Optionen", [
             "Materialkosten verwalten",
             "Fulfillment-Kosten verwalten",
-            "Transaktionskosten verwalten"
+            "Transaktionskosten verwalten",
+            "Marketingkosten verwalten"
         ])
         
         if inventory_option == "Materialkosten verwalten":
@@ -438,6 +461,8 @@ def main():
             manage_fulfillment_costs()
         elif inventory_option == "Transaktionskosten verwalten":
             manage_transaction_costs()
+        elif inventory_option == "Marketingkosten verwalten":
+            manage_marketing_costs()
 
 if __name__ == "__main__":
     main()
