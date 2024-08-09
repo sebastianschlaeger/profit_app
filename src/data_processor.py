@@ -18,6 +18,15 @@ def process_sku(sku):
         logger.warning(f"Error processing SKU: {e}")
         return ""
 
+def safe_float(value):
+    """
+    Safely convert a value to float, returning 0.0 if conversion fails.
+    """
+    try:
+        return float(value) if value is not None else 0.0
+    except (ValueError, TypeError):
+        return 0.0
+
 def process_orders(orders_data):
     processed_orders = []
     for order in orders_data:
@@ -30,20 +39,24 @@ def process_orders(orders_data):
             "TotalOrderWeight": 0,
             "Currency": order["Currency"],
             "CreatedAt": order["CreatedAt"].split("T")[0],
-            "TaxAmount": sum(item["TaxAmount"] for item in order["OrderItems"]),
-            "TotalCost": order["TotalCost"]
+            "TaxAmount": sum(safe_float(item.get("TaxAmount", 0)) for item in order["OrderItems"]),
+            "TotalCost": safe_float(order.get("TotalCost", 0))
         }
 
         for item in order["OrderItems"]:
+            quantity = safe_float(item.get("Quantity", 0))
+            total_price = safe_float(item.get("TotalPrice", 0))
+            weight = safe_float(item["Product"].get("Weight", 0))
+
             order_item = {
-                "SKU": process_sku(item["Product"].get("SKU")),  # Use .get() method
-                "Quantity": item["Quantity"],
-                "TotalPrice": item["TotalPrice"],
-                "Weight": item["Product"].get("Weight", 0)  # Use .get() with default value
+                "SKU": process_sku(item["Product"].get("SKU")),
+                "Quantity": quantity,
+                "TotalPrice": total_price,
+                "Weight": weight
             }
             processed_order["OrderItems"].append(order_item)
-            processed_order["TotalOrderPrice"] += item["TotalPrice"]
-            processed_order["TotalOrderWeight"] += order_item["Weight"] * item["Quantity"]
+            processed_order["TotalOrderPrice"] += total_price
+            processed_order["TotalOrderWeight"] += weight * quantity
 
         processed_orders.append(processed_order)
 
