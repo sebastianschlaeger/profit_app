@@ -80,6 +80,10 @@ def calculate_profit(processed_df):
     
     return order_costs
 
+def process_order_items(order_items_str):
+    items = json.loads(order_items_str.replace("'", '"'))
+    return [(item['SKU'], float(item['Quantity'])) for item in items]
+
 def fetch_yesterday_data():
     yesterday = datetime.now().date() - timedelta(days=1)
     if yesterday not in get_saved_dates():
@@ -145,7 +149,7 @@ def display_overview_table(start_date, end_date):
                 st.warning("Keine Materialkosten gefunden.")
                 logger.warning("Material costs DataFrame ist leer.")
             else:
-                overview_data = calculate_overview_data(combined_df, material_costs)
+                overview_data = calculate_overview_data(combined_df, material_costs.set_index('SKU')['Cost'].to_dict())
                 
                 if overview_data.empty:
                     st.warning("Die berechnete Übersicht ist leer.")
@@ -205,67 +209,59 @@ def extract_skus_and_quantities(order_items):
 
 def calculate_overview_data(billbee_data, material_costs):
     try:
-        logger.info(f"Spalten in billbee_data: {billbee_data.columns.tolist()}")
-        logger.info(f"Spalten in material_costs: {material_costs.columns.tolist()}")
+        billbee_data['CreatedAt'] = pd.to_datetime(billbee_data['CreatedAt']).dt.date
+        billbee_data['OrderItems'] = billbee_data['OrderItems'].apply(process_order_items)
         
-        if 'OrderItems' not in billbee_data.columns:
-            logger.error("'OrderItems' Spalte fehlt in billbee_data")
-            raise KeyError("'OrderItems' Spalte fehlt in billbee_data")
+        # Berechne Materialkosten
+        def calculate_material_cost(order_items):
+            return sum(material_costs.get(sku, 0) * quantity for sku, quantity in order_items)
         
-        if 'SKU' not in material_costs.columns:
-            logger.error("'SKU' Spalte fehlt in material_costs")
-            raise KeyError("'SKU' Spalte fehlt in material_costs")
+        billbee_data['MaterialCost'] = billbee_data['OrderItems'].apply(calculate_material_cost)
         
-        # Extrahieren der SKUs und Mengen aus OrderItems
-        billbee_data['SKU_Quantity'] = billbee_data['OrderItems'].apply(extract_skus_and_quantities)
-        
-        # Explodieren der SKU_Quantity Liste, um eine Zeile pro SKU zu erhalten
-        exploded_df = billbee_data.explode('SKU_Quantity')
-        exploded_df['SKU'] = exploded_df['SKU_Quantity'].apply(lambda x: x[0] if x else None)
-        exploded_df['Quantity'] = exploded_df['SKU_Quantity'].apply(lambda x: x[1] if x else 0)
-        
-        # Zusammenführen der Bestelldaten mit den Materialkosten
-        merged = exploded_df.merge(material_costs, on='SKU', how='left')
-        
-        # Überprüfen auf fehlende Werte nach dem Merge
-        missing_costs = merged[merged['Cost'].isna()]
-        if not missing_costs.empty:
-            logger.warning(f"{len(missing_costs)} Zeilen haben keine zugeordneten Materialkosten")
-            logger.warning(f"SKUs ohne Materialkosten: {missing_costs['SKU'].unique().tolist()}")
-        
-        # Berechnung der relevanten Metriken
-        merged['MaterialCost'] = merged['Quantity'] * merged['Cost'].fillna(0)
-        merged['GrossRevenue'] = merged['TotalPrice']
-        merged['NetRevenue'] = merged['TotalPrice'] - merged['TaxAmount']
-        
-        # Aggregation auf Bestellebene
-        order_summary = merged.groupby('OrderNumber').agg({
-            'GrossRevenue': 'sum',
-            'NetRevenue': 'sum',
+        # Gruppiere die Daten nach Datum
+        grouped = billbee_data.groupby('CreatedAt').agg({
+            'TotalOrderPrice': 'sum',
+            'TaxAmount': 'sum',
             'MaterialCost': 'sum'
         }).reset_index()
         
-        # Berechnung der zusätzlichen Metriken
-        order_summary['MaterialCostPercentage'] = (order_summary['MaterialCost'] / order_summary['NetRevenue']) * 100
-        order_summary['ContributionMargin1'] = order_summary['NetRevenue'] - order_summary['MaterialCost']
+        # Berechne die zusätzlichen Metriken
+        grouped['UmsatzNetto'] = grouped['TotalOrderPrice'] - grouped['TaxAmount']
+        grouped['MaterialkostenProzent'] = (grouped['MaterialCost'] / grouped['UmsatzNetto']) * 100
+        grouped['Deckungsbeitrag1'] = grouped['UmsatzNetto'] - grouped['MaterialCost']
         
-        return order_summary
+        # Formatiere die Tabelle
+        result = grouped.rename(columns={
+            'CreatedAt': 'Datum',
+            'TotalOrderPrice': 'Umsatz Brutto',
+            'UmsatzNetto': 'Umsatz Netto',
+            'MaterialCost': 'Materialkosten',
+            'MaterialkostenProzent': 'Materialkosten %',
+            'Deckungsbeitrag1': 'Deckungsbeitrag 1'
+        })
+        
+        # Runde die Zahlen
+        for col in ['Umsatz Brutto', 'Umsatz Netto', 'Materialkosten', 'Deckungsbeitrag 1']:
+            result[col] = result[col].round(2)
+        result['Materialkosten %'] = result['Materialkosten %'].round(1)
+        
+        return result
     except Exception as e:
         logger.error(f"Fehler bei der Berechnung der Übersichtsdaten: {str(e)}", exc_info=True)
         raise
         
 def display_summary(overview_data):
-    total_gross_revenue = overview_data['GrossRevenue'].sum()
-    total_net_revenue = overview_data['NetRevenue'].sum()
-    total_material_cost = overview_data['MaterialCost'].sum()
+    total_gross_revenue = overview_data['Umsatz Brutto'].sum()
+    total_net_revenue = overview_data['Umsatz Netto'].sum()
+    total_material_cost = overview_data['Materialkosten'].sum()
     total_material_cost_percentage = (total_material_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
-    total_contribution_margin = total_net_revenue - total_material_cost
+    total_contribution_margin = overview_data['Deckungsbeitrag 1'].sum()
     
     st.subheader("Zusammenfassung:")
     st.write(f"Umsatz Brutto: {total_gross_revenue:.2f} EUR")
     st.write(f"Umsatz Netto: {total_net_revenue:.2f} EUR")
     st.write(f"Materialkosten: {total_material_cost:.2f} EUR")
-    st.write(f"Materialkosten %: {total_material_cost_percentage:.2f}%")
+    st.write(f"Materialkosten %: {total_material_cost_percentage:.1f}%")
     st.write(f"Deckungsbeitrag 1: {total_contribution_margin:.2f} EUR")
 
 def fetch_and_process_data(date):
