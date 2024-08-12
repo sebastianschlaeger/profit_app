@@ -435,7 +435,6 @@ def manage_marketing_costs():
         st.success("Änderungen wurden gespeichert.")
 
 def calculate_shipping_costs(weight_in_grams, country):
-    # Konvertiere Gramm in Kilogramm
     weight_in_kg = weight_in_grams / 1000
 
     def calculate_german_shipping(weight):
