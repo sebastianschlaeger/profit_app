@@ -276,6 +276,14 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
         marketing_costs['Date'] = pd.to_datetime(marketing_costs['Date']).dt.date
         grouped = pd.merge(grouped, marketing_costs, left_on='CreatedAt', right_on='Date', how='left')
         
+        # Überprüfe, ob die erforderlichen Spalten vorhanden sind
+        required_columns = ['Google Ads', 'Amazon Ads', 'Ebay Ads', 'Kaufland Ads']
+        missing_columns = [col for col in required_columns if col not in grouped.columns]
+        if missing_columns:
+            logger.warning(f"Fehlende Spalten in den Marketingkosten: {missing_columns}")
+            for col in missing_columns:
+                grouped[col] = 0
+        
         # Berechne Marketingkosten pro Plattform
         platform_ad_columns = {
             'Purgrün': 'Google Ads',
@@ -335,8 +343,12 @@ def display_summary(overview_data):
     total_transaction_cost = overview_data['Transaktionskosten'].sum()
     total_transaction_cost_percentage = (total_transaction_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
     total_contribution_margin_2 = overview_data['Deckungsbeitrag 2'].sum()
-    total_marketing_cost = overview_data[['Marketingkosten_Purgrün', 'Marketingkosten_Amazon', 'Marketingkosten_Ebay', 'Marketingkosten_Kaufland']].sum().sum()
+    
+    # Berechne die Gesamtmarketingkosten
+    marketing_columns = ['Marketingkosten_Purgrün', 'Marketingkosten_Amazon', 'Marketingkosten_Ebay', 'Marketingkosten_Kaufland']
+    total_marketing_cost = sum(overview_data[col].sum() for col in marketing_columns if col in overview_data.columns)
     total_marketing_cost_percentage = (total_marketing_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
+    
     total_contribution_margin_3 = overview_data['Deckungsbeitrag 3'].sum()
     
     st.subheader("Gesamtübersicht:")
