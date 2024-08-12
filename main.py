@@ -250,14 +250,17 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
         
         # Berechne Versandkosten
         billbee_data['ShippingCost'] = billbee_data.apply(
-            lambda row: calculate_shipping_costs(row['TotalOrderWeight'], row['ShippingAddress']['CountryISO2']), 
+            lambda row: calculate_shipping_costs(
+                row.get('TotalOrderWeight', 0), 
+                row.get('ShippingAddress', {}).get('CountryISO2', 'OTHER')
+            ), 
             axis=1
         )
         
         # Berechne Transaktionskosten
         transaction_cost_dict = dict(zip(transaction_costs['Platform'], transaction_costs['TransactionCostPercent']))
         billbee_data['TransactionCost'] = billbee_data.apply(
-            lambda row: row['TotalOrderPrice'] * transaction_cost_dict.get(row['Seller']['Platform'], 0) / 100, 
+            lambda row: row.get('TotalOrderPrice', 0) * transaction_cost_dict.get(row.get('Seller', {}).get('Platform', 'OTHER'), 0) / 100, 
             axis=1
         )
         
