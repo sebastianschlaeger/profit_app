@@ -1,6 +1,7 @@
 import pandas as pd
 import logging
 import json
+from src.error_handler import handle_error, DataFetchError
 
 logger = logging.getLogger(__name__)
 
