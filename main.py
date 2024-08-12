@@ -147,10 +147,6 @@ def display_overview_table(start_date, end_date):
             fulfillment_costs = load_fulfillment_costs()
             transaction_costs = load_transaction_costs()
             marketing_costs = load_marketing_costs()
-            logger.info(f"Anzahl der geladenen Materialkosten: {len(material_costs)}")
-            logger.info(f"Fulfillment-Kosten geladen: {fulfillment_costs.to_dict()}")
-            logger.info(f"Transaktionskosten geladen: {transaction_costs.to_dict()}")
-            logger.info(f"Marketingkosten geladen: {len(marketing_costs)}")
             
             if combined_df.empty:
                 st.warning("Die geladenen Daten sind leer.")
@@ -159,10 +155,15 @@ def display_overview_table(start_date, end_date):
                 st.warning("Keine Material-, Fulfillment- oder Transaktionskosten gefunden.")
                 logger.warning("Material costs, Fulfillment costs oder Transaction costs DataFrame ist leer.")
             else:
-                overview_data = calculate_overview_data(combined_df, material_costs.set_index('SKU')['Cost'].to_dict(), fulfillment_costs, transaction_costs)
+                overview_data = calculate_overview_data(combined_df, material_costs, fulfillment_costs, transaction_costs)
                 
                 # Füge Marketingkosten hinzu
-                overview_data = pd.merge(overview_data, marketing_costs, left_on='Datum', right_on='Date', how='left')
+                marketing_columns = ['Google Ads', 'Amazon Ads', 'Ebay Ads', 'Kaufland Ads']
+                for col in marketing_columns:
+                    if col not in overview_data.columns:
+                        overview_data[col] = 0
+                        logger.warning(f"Spalte {col} nicht in den Daten gefunden. Wird mit 0 aufgefüllt.")
+                
                 overview_data['Marketingkosten'] = overview_data['Google Ads'] + overview_data['Amazon Ads'] + overview_data['Ebay Ads'] + overview_data['Kaufland Ads']
                 overview_data['Marketingkosten'] = overview_data['Marketingkosten'].fillna(0)
                 overview_data['Marketingkosten %'] = (overview_data['Marketingkosten'] / overview_data['Umsatz Netto']) * 100
