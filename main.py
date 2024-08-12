@@ -11,6 +11,7 @@ from src.data_processor import process_orders, create_dataframe, save_to_csv
 from src.fulfillment_costs import load_fulfillment_costs, save_fulfillment_costs
 from src.transaction_costs import load_transaction_costs, save_transaction_costs
 from src.marketing_costs import load_marketing_costs, save_marketing_costs
+from src.inventory_management import load_material_costs, save_material_costs
 
 
 # Configure logging
@@ -421,6 +422,67 @@ def manage_marketing_costs():
     if st.button("Änderungen speichern"):
         save_marketing_costs(edited_df)
         st.success("Änderungen wurden gespeichert.")
+
+def calculate_shipping_costs(weight, country):
+    def calculate_german_shipping(weight):
+        if weight <= 2:
+            base_price = 3.55
+        elif weight <= 3:
+            base_price = 3.65
+        elif weight <= 5:
+            base_price = 3.90
+        elif weight <= 20:
+            base_price = 6.90
+        else:
+            base_price = 9.90
+        
+        energy_surcharge = base_price * 0.0125
+        total = base_price + energy_surcharge + 0.18
+        return total
+
+    def calculate_austria_shipping(weight):
+        return 6.68 + 0.40 * weight
+
+    def calculate_other_countries_shipping(weight):
+        return 11.6 + 0.70 * weight
+
+    if country == 'DE':
+        return calculate_german_shipping(weight)
+    elif country == 'AT':
+        return calculate_austria_shipping(weight)
+    else:
+        return calculate_other_countries_shipping(weight)
+
+def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, transaction_costs):
+    try:
+        billbee_data['CreatedAt'] = pd.to_datetime(billbee_data['CreatedAt']).dt.date
+        billbee_data['OrderItems'] = billbee_data['OrderItems'].apply(process_order_items)
+        
+        # Berechne Materialkosten
+        def calculate_material_cost(order_items):
+            return sum(material_costs.get(sku, 0) * quantity for sku, quantity in order_items)
+        
+        billbee_data['MaterialCost'] = billbee_data['OrderItems'].apply(calculate_material_cost)
+        
+        # Berechne Fulfillment-Kosten
+        billbee_data['FulfillmentCost'] = (
+            fulfillment_costs['Auftragspauschale'].iloc[0] +
+            fulfillment_costs['SKU_Pick'].iloc[0] * billbee_data['OrderItems'].apply(lambda x: sum(quantity for _, quantity in x)) +
+            fulfillment_costs['Kartonage'].iloc[0]
+        )
+        
+        # Berechne Versandkosten
+        billbee_data['ShippingCost'] = billbee_data.apply(
+            lambda row: calculate_shipping_costs(row['TotalOrderWeight'], row['ShippingAddress']['CountryISO2']), 
+            axis=1
+        )
+        
+        # Berechne Transaktionskosten
+        transaction_cost_dict = dict(zip(transaction_costs['Platform'], transaction_costs['TransactionCostPercent']))
+        billbee_data['TransactionCost'] = billbee_data.apply(
+            lambda row: row['TotalOrderPrice'] * transaction_cost_dict.get(row['Seller']['Platform'], 0) / 100, 
+            axis=1
+        )
 
 def main():
     st.title("E-Commerce Profitabilitäts-App")
