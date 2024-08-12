@@ -434,7 +434,10 @@ def manage_marketing_costs():
         save_marketing_costs(edited_df)
         st.success("Änderungen wurden gespeichert.")
 
-def calculate_shipping_costs(weight, country):
+def calculate_shipping_costs(weight_in_grams, country):
+    # Konvertiere Gramm in Kilogramm
+    weight_in_kg = weight_in_grams / 1000
+
     def calculate_german_shipping(weight):
         if weight <= 2:
             base_price = 3.55
@@ -458,11 +461,11 @@ def calculate_shipping_costs(weight, country):
         return 11.6 + 0.70 * weight
 
     if country == 'DE':
-        return calculate_german_shipping(weight)
+        return calculate_german_shipping(weight_in_kg)
     elif country == 'AT':
-        return calculate_austria_shipping(weight)
+        return calculate_austria_shipping(weight_in_kg)
     else:
-        return calculate_other_countries_shipping(weight)
+        return calculate_other_countries_shipping(weight_in_kg)
 
 def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, transaction_costs):
     try:
@@ -485,7 +488,7 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
         # Berechne Versandkosten
         billbee_data['ShippingCost'] = billbee_data.apply(
             lambda row: calculate_shipping_costs(
-                row.get('TotalOrderWeight', 0), 
+                row.get('TotalOrderWeight', 0),  # Dies ist jetzt in Gramm
                 row.get('ShippingAddress', {}).get('CountryISO2', 'OTHER')
             ), 
             axis=1
