@@ -232,21 +232,23 @@ def extract_skus_and_quantities(order_items):
 def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, transaction_costs):
     try:
         billbee_data['CreatedAt'] = pd.to_datetime(billbee_data['CreatedAt']).dt.date
-        billbee_data['OrderItems'] = billbee_data['OrderItems'].apply(process_order_items)
+        billbee_data['OrderItems'] = billbee_data['OrderItems'].apply(json.loads)
         
         # Berechne Materialkosten
         def calculate_material_cost(order_items):
-            return sum(material_costs.get(sku, 0) * quantity for sku, quantity in order_items)
+            return sum(material_costs.get(item['SKU'], 0) * item['Quantity'] for item in order_items)
         
         billbee_data['MaterialCost'] = billbee_data['OrderItems'].apply(calculate_material_cost)
         
         # Berechne Fulfillment-Kosten
         billbee_data['FulfillmentCost'] = (
             fulfillment_costs['Auftragspauschale'].iloc[0] +
-            fulfillment_costs['SKU_Pick'].iloc[0] * billbee_data['OrderItems'].apply(lambda x: sum(quantity for _, quantity in x)) +
+            fulfillment_costs['SKU_Pick'].iloc[0] * billbee_data['OrderItems'].apply(lambda x: sum(item['Quantity'] for item in x)) +
             fulfillment_costs['Kartonage'].iloc[0]
         )
-        billbee_data['ShippingCost'] = fulfillment_costs['Versandkosten'].iloc[0]
+        
+        # Berechne Versandkosten
+        billbee_data['ShippingCost'] = billbee_data.apply(lambda row: calculate_shipping_costs(row['TotalOrderWeight'], row['CustomerCountry']), axis=1)
         
         # Berechne Transaktionskosten
         transaction_cost_dict = dict(zip(transaction_costs['Platform'], transaction_costs['TransactionCostPercent']))
