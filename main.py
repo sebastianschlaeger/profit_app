@@ -273,12 +273,21 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
         
         # Füge Marketingkosten hinzu
         marketing_costs = load_marketing_costs()
+        marketing_costs['Date'] = pd.to_datetime(marketing_costs['Date']).dt.date
         grouped = pd.merge(grouped, marketing_costs, left_on='CreatedAt', right_on='Date', how='left')
         
         # Berechne Marketingkosten pro Plattform
-        for platform in ['Purgrün', 'Amazon', 'Ebay', 'Kaufland']:
-            cost_column = f"{platform} Ads" if platform != 'Purgrün' else 'Google Ads'
-            grouped[f'Marketingkosten_{platform}'] = grouped[cost_column].fillna(0)
+        platform_ad_columns = {
+            'Purgrün': 'Google Ads',
+            'Amazon': 'Amazon Ads',
+            'Ebay': 'Ebay Ads',
+            'Kaufland': 'Kaufland Ads'
+        }
+        
+        for platform, ad_column in platform_ad_columns.items():
+            grouped[f'Marketingkosten_{platform}'] = grouped.apply(
+                lambda row: row[ad_column] if row['Platform'] == platform else 0, axis=1
+            ).fillna(0)
             grouped[f'Marketingkosten_{platform}%'] = (grouped[f'Marketingkosten_{platform}'] / grouped['UmsatzNetto']) * 100
         
         grouped['Deckungsbeitrag3'] = grouped['Deckungsbeitrag2'] - grouped['Marketingkosten_Purgrün'] - grouped['Marketingkosten_Amazon'] - grouped['Marketingkosten_Ebay'] - grouped['Marketingkosten_Kaufland']
