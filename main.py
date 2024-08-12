@@ -247,11 +247,19 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
             fulfillment_costs['SKU_Pick'].iloc[0] * billbee_data['OrderItems'].apply(lambda x: sum(quantity for _, quantity in x)) +
             fulfillment_costs['Kartonage'].iloc[0]
         )
-        billbee_data['ShippingCost'] = fulfillment_costs['Versandkosten'].iloc[0]
+        
+        # Berechne Versandkosten
+        billbee_data['ShippingCost'] = billbee_data.apply(
+            lambda row: calculate_shipping_costs(row['TotalOrderWeight'], row['ShippingAddress']['CountryISO2']), 
+            axis=1
+        )
         
         # Berechne Transaktionskosten
         transaction_cost_dict = dict(zip(transaction_costs['Platform'], transaction_costs['TransactionCostPercent']))
-        billbee_data['TransactionCost'] = billbee_data.apply(lambda row: row['TotalOrderPrice'] * transaction_cost_dict.get(row['Platform'], 0) / 100, axis=1)
+        billbee_data['TransactionCost'] = billbee_data.apply(
+            lambda row: row['TotalOrderPrice'] * transaction_cost_dict.get(row['Seller']['Platform'], 0) / 100, 
+            axis=1
+        )
         
         # Gruppiere die Daten nach Datum
         grouped = billbee_data.groupby('CreatedAt').agg({
