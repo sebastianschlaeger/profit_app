@@ -484,16 +484,68 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
         
         # Berechne Versandkosten
         billbee_data['ShippingCost'] = billbee_data.apply(
-            lambda row: calculate_shipping_costs(row['TotalOrderWeight'], row['ShippingAddress']['CountryISO2']), 
+            lambda row: calculate_shipping_costs(
+                row.get('TotalOrderWeight', 0), 
+                row.get('ShippingAddress', {}).get('CountryISO2', 'OTHER')
+            ), 
             axis=1
         )
         
         # Berechne Transaktionskosten
         transaction_cost_dict = dict(zip(transaction_costs['Platform'], transaction_costs['TransactionCostPercent']))
         billbee_data['TransactionCost'] = billbee_data.apply(
-            lambda row: row['TotalOrderPrice'] * transaction_cost_dict.get(row['Seller']['Platform'], 0) / 100, 
+            lambda row: row.get('TotalOrderPrice', 0) * transaction_cost_dict.get(row.get('Seller', {}).get('Platform', 'OTHER'), 0) / 100, 
             axis=1
         )
+        
+        # Gruppiere die Daten nach Datum
+        grouped = billbee_data.groupby('CreatedAt').agg({
+            'TotalOrderPrice': 'sum',
+            'TaxAmount': 'sum',
+            'MaterialCost': 'sum',
+            'FulfillmentCost': 'sum',
+            'ShippingCost': 'sum',
+            'TransactionCost': 'sum'
+        }).reset_index()
+        
+        # Berechne die zusätzlichen Metriken
+        grouped['UmsatzNetto'] = grouped['TotalOrderPrice'] - grouped['TaxAmount']
+        grouped['MaterialkostenProzent'] = (grouped['MaterialCost'] / grouped['UmsatzNetto']) * 100
+        grouped['Deckungsbeitrag1'] = grouped['UmsatzNetto'] - grouped['MaterialCost']
+        grouped['GesamtkostenFulfillment'] = grouped['FulfillmentCost'] + grouped['ShippingCost']
+        grouped['GesamtkostenFulfillmentProzent'] = (grouped['GesamtkostenFulfillment'] / grouped['UmsatzNetto']) * 100
+        grouped['TransaktionskostenProzent'] = (grouped['TransactionCost'] / grouped['UmsatzNetto']) * 100
+        grouped['Deckungsbeitrag2'] = grouped['Deckungsbeitrag1'] - grouped['GesamtkostenFulfillment'] - grouped['TransactionCost']
+        
+        # Formatiere die Tabelle
+        result = grouped.rename(columns={
+            'CreatedAt': 'Datum',
+            'TotalOrderPrice': 'Umsatz Brutto',
+            'UmsatzNetto': 'Umsatz Netto',
+            'MaterialCost': 'Materialkosten',
+            'MaterialkostenProzent': 'Materialkosten %',
+            'Deckungsbeitrag1': 'Deckungsbeitrag 1',
+            'FulfillmentCost': 'Fulfillment-Kosten',
+            'ShippingCost': 'Versandkosten',
+            'GesamtkostenFulfillment': 'Gesamtkosten Fulfillment €',
+            'GesamtkostenFulfillmentProzent': 'Gesamtkosten Fulfillment %',
+            'TransactionCost': 'Transaktionskosten',
+            'TransaktionskostenProzent': 'Transaktionskosten %',
+            'Deckungsbeitrag2': 'Deckungsbeitrag 2'
+        })
+        
+        # Runde die Zahlen
+        for col in ['Umsatz Brutto', 'Umsatz Netto', 'Materialkosten', 'Deckungsbeitrag 1', 
+                    'Fulfillment-Kosten', 'Versandkosten', 'Gesamtkosten Fulfillment €', 
+                    'Transaktionskosten', 'Deckungsbeitrag 2']:
+            result[col] = result[col].round(2)
+        for col in ['Materialkosten %', 'Gesamtkosten Fulfillment %', 'Transaktionskosten %']:
+            result[col] = result[col].round(1)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Fehler bei der Berechnung der Übersichtsdaten: {str(e)}", exc_info=True)
+        raise
 
 def main():
     st.title("E-Commerce Profitabilitäts-App")
