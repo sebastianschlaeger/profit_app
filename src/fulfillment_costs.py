@@ -14,10 +14,11 @@ def load_fulfillment_costs():
             with s3.open(file_path, 'rb') as f:
                 df = pd.read_csv(f)
                 return df
-        return pd.DataFrame(columns=['Auftragspauschale', 'SKU_Pick', 'Kartonage', 'Versandkosten'])
+        return pd.DataFrame(columns=['Auftragspauschale', 'SKU_Pick', 'Kartonage'])
     except Exception as e:
         logger.error(f"Fehler beim Laden der Fulfillment-Kostendaten: {str(e)}")
         raise
+
 
 def save_fulfillment_costs(df):
     s3 = get_s3_fs()
