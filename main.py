@@ -8,7 +8,7 @@ from src.billbee_api import BillbeeAPI
 from src.s3_operations import save_to_s3, get_saved_dates, load_from_s3, save_daily_order_data
 from src.s3_utils import get_s3_fs
 from src.data_processor import process_orders, create_dataframe, save_to_csv
-from src.fulfillment_costs import load_fulfillment_costs, save_fulfillment_costs
+from src.fulfillment_costs import calculate_shipping_costs, load_fulfillment_costs, save_fulfillment_costs
 from src.transaction_costs import load_transaction_costs, save_transaction_costs
 from src.marketing_costs import load_marketing_costs, save_marketing_costs
 
