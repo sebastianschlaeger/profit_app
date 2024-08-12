@@ -252,8 +252,8 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
         transaction_cost_dict = dict(zip(transaction_costs['Platform'], transaction_costs['TransactionCostPercent']))
         billbee_data['TransactionCost'] = billbee_data.apply(lambda row: row['TotalOrderPrice'] * transaction_cost_dict.get(row['Platform'], 0) / 100, axis=1)
         
-        # Gruppiere die Daten nach Datum
-        grouped = billbee_data.groupby('CreatedAt').agg({
+        # Gruppiere die Daten nach Datum und Plattform
+        grouped = billbee_data.groupby(['CreatedAt', 'Platform']).agg({
             'TotalOrderPrice': 'sum',
             'TaxAmount': 'sum',
             'MaterialCost': 'sum',
@@ -271,6 +271,18 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
         grouped['TransaktionskostenProzent'] = (grouped['TransactionCost'] / grouped['UmsatzNetto']) * 100
         grouped['Deckungsbeitrag2'] = grouped['Deckungsbeitrag1'] - grouped['GesamtkostenFulfillment'] - grouped['TransactionCost']
         
+        # Füge Marketingkosten hinzu
+        marketing_costs = load_marketing_costs()
+        grouped = pd.merge(grouped, marketing_costs, left_on='CreatedAt', right_on='Date', how='left')
+        
+        # Berechne Marketingkosten pro Plattform
+        for platform in ['Purgrün', 'Amazon', 'Ebay', 'Kaufland']:
+            cost_column = f"{platform} Ads" if platform != 'Purgrün' else 'Google Ads'
+            grouped[f'Marketingkosten_{platform}'] = grouped[cost_column].fillna(0)
+            grouped[f'Marketingkosten_{platform}%'] = (grouped[f'Marketingkosten_{platform}'] / grouped['UmsatzNetto']) * 100
+        
+        grouped['Deckungsbeitrag3'] = grouped['Deckungsbeitrag2'] - grouped['Marketingkosten_Purgrün'] - grouped['Marketingkosten_Amazon'] - grouped['Marketingkosten_Ebay'] - grouped['Marketingkosten_Kaufland']
+        
         # Formatiere die Tabelle
         result = grouped.rename(columns={
             'CreatedAt': 'Datum',
@@ -285,13 +297,14 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
             'GesamtkostenFulfillmentProzent': 'Gesamtkosten Fulfillment %',
             'TransactionCost': 'Transaktionskosten',
             'TransaktionskostenProzent': 'Transaktionskosten %',
-            'Deckungsbeitrag2': 'Deckungsbeitrag 2'
+            'Deckungsbeitrag2': 'Deckungsbeitrag 2',
+            'Deckungsbeitrag3': 'Deckungsbeitrag 3'
         })
         
         # Runde die Zahlen
         for col in ['Umsatz Brutto', 'Umsatz Netto', 'Materialkosten', 'Deckungsbeitrag 1', 
                     'Fulfillment-Kosten', 'Versandkosten', 'Gesamtkosten Fulfillment €', 
-                    'Transaktionskosten', 'Deckungsbeitrag 2']:
+                    'Transaktionskosten', 'Deckungsbeitrag 2', 'Deckungsbeitrag 3']:
             result[col] = result[col].round(2)
         for col in ['Materialkosten %', 'Gesamtkosten Fulfillment %', 'Transaktionskosten %']:
             result[col] = result[col].round(1)
@@ -302,6 +315,7 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
         raise
         
 def display_summary(overview_data):
+    # Gesamtübersicht
     total_gross_revenue = overview_data['Umsatz Brutto'].sum()
     total_net_revenue = overview_data['Umsatz Netto'].sum()
     total_material_cost = overview_data['Materialkosten'].sum()
@@ -312,11 +326,11 @@ def display_summary(overview_data):
     total_transaction_cost = overview_data['Transaktionskosten'].sum()
     total_transaction_cost_percentage = (total_transaction_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
     total_contribution_margin_2 = overview_data['Deckungsbeitrag 2'].sum()
-    total_marketing_cost = overview_data['Marketingkosten'].sum()
+    total_marketing_cost = overview_data[['Marketingkosten_Purgrün', 'Marketingkosten_Amazon', 'Marketingkosten_Ebay', 'Marketingkosten_Kaufland']].sum().sum()
     total_marketing_cost_percentage = (total_marketing_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
     total_contribution_margin_3 = overview_data['Deckungsbeitrag 3'].sum()
     
-    st.subheader("Zusammenfassung:")
+    st.subheader("Gesamtübersicht:")
     col1, col2 = st.columns(2)
     
     with col1:
@@ -341,6 +355,30 @@ def display_summary(overview_data):
     st.write(f"DB1 Marge: {db1_margin:.1f}%")
     st.write(f"DB2 Marge: {db2_margin:.1f}%")
     st.write(f"DB3 Marge: {db3_margin:.1f}%")
+
+    # Übersicht pro Verkaufskanal
+    st.subheader("Übersicht pro Verkaufskanal:")
+    for platform in ['Purgrün', 'Amazon', 'Ebay', 'Kaufland']:
+        platform_data = overview_data[overview_data['Platform'] == platform]
+        if not platform_data.empty:
+            st.write(f"**{platform}:**")
+            platform_net_revenue = platform_data['Umsatz Netto'].sum()
+            platform_db1 = platform_data['Deckungsbeitrag 1'].sum()
+            platform_db2 = platform_data['Deckungsbeitrag 2'].sum()
+            platform_db3 = platform_data['Deckungsbeitrag 3'].sum()
+            
+            platform_db1_margin = (platform_db1 / platform_net_revenue) * 100 if platform_net_revenue != 0 else 0
+            platform_db2_margin = (platform_db2 / platform_net_revenue) * 100 if platform_net_revenue != 0 else 0
+            platform_db3_margin = (platform_db3 / platform_net_revenue) * 100 if platform_net_revenue != 0 else 0
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"Umsatz Netto: {platform_net_revenue:.2f} EUR")
+                st.write(f"DB1: {platform_db1:.2f} EUR (Marge: {platform_db1_margin:.1f}%)")
+            with col2:
+                st.write(f"DB2: {platform_db2:.2f} EUR (Marge: {platform_db2_margin:.1f}%)")
+                st.write(f"DB3: {platform_db3:.2f} EUR (Marge: {platform_db3_margin:.1f}%)")
+            st.write("---")
 
 
 def fetch_and_process_data(date):
