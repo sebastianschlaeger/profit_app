@@ -109,65 +109,97 @@ def fetch_data_for_range(start_date, end_date):
         all_data = []
         current_date = start_date
         while current_date <= end_date:
-            orders_data = billbee_api.get_orders_for_date(current_date)
-            df = pd.DataFrame(orders_data)
-            all_data.append(df)
-            save_daily_order_data(df, current_date)
-            current_date += timedelta(days=1)
-        
-        combined_df = pd.concat(all_data, ignore_index=True)
-        save_to_s3(combined_df, end_date)
-        st.success(f"Daten von {start_date} bis {end_date} erfolgreich abgerufen und gespeichert.")
-    except Exception as e:
-        logger.error(f"Fehler beim Abrufen der Daten von {start_date} bis {end_date}: {str(e)}")
-        st.error(f"Fehler beim Abrufen der Daten von {start_date} bis {end_date}. Bitte überprüfen Sie die Logs für weitere Details.")
-
-def display_overview_table(start_date, end_date):
-    st.subheader(f"Übersichtstabelle ({start_date} bis {end_date})")
-    
-    try:
-        all_data = []
-        missing_dates = []
-        current_date = start_date
-        while current_date <= end_date:
-            df = load_from_s3(current_date)
-            if df is not None and not df.empty:
+            df = fetch_and_process_data(current_date)
+            if df is not None:
                 all_data.append(df)
-                logger.info(f"Daten für {current_date} erfolgreich geladen.")
-            else:
-                missing_dates.append(current_date)
-                logger.warning(f"Keine Daten für {current_date} gefunden.")
             current_date += timedelta(days=1)
         
         if all_data:
             combined_df = pd.concat(all_data, ignore_index=True)
-            logger.info(f"Gesamtanzahl der geladenen Datensätze: {len(combined_df)}")
+            st.success(f"Daten von {start_date} bis {end_date} erfolgreich abgerufen und gespeichert.")
+            return combined_df
+        else:
+            st.warning("Keine Daten für den ausgewählten Zeitraum gefunden.")
+            return None
+    except Exception as e:
+        st.error(f"Fehler beim Abrufen der Daten von {start_date} bis {end_date}. Bitte überprüfen Sie die Logs für weitere Details.")
+        return None
+
+def display_overview_page():
+    st.subheader("Übersicht anzeigen")
+    
+    # Initialisiere session_state Variablen
+    if 'start_date' not in st.session_state:
+        st.session_state.start_date = datetime.now().date() - timedelta(days=7)
+    if 'end_date' not in st.session_state:
+        st.session_state.end_date = datetime.now().date() - timedelta(days=1)
+    if 'show_table' not in st.session_state:
+        st.session_state.show_table = False
+    if 'selected_marketplace' not in st.session_state:
+        st.session_state.selected_marketplace = "Alle"
+    if 'selected_country' not in st.session_state:
+        st.session_state.selected_country = "Alle"
+
+    # Datumsauswahl
+    col1, col2 = st.columns(2)
+    with col1:
+        st.session_state.start_date = st.date_input("Startdatum", st.session_state.start_date)
+    with col2:
+        st.session_state.end_date = st.date_input("Enddatum", st.session_state.end_date)
+
+    # Button zum Anzeigen der Tabelle
+    if st.button("Übersichtstabelle anzeigen/aktualisieren"):
+        st.session_state.show_table = True
+
+    # Wenn die Tabelle angezeigt werden soll
+    if st.session_state.show_table:
+        display_filtered_overview_table()
+
+def display_filtered_overview_table():
+    try:
+        all_data = []
+        missing_dates = []
+        current_date = st.session_state.start_date
+        while current_date <= st.session_state.end_date:
+            df = load_from_s3(current_date)
+            if df is not None and not df.empty:
+                all_data.append(df)
+            else:
+                missing_dates.append(current_date)
+            current_date += timedelta(days=1)
+        
+        if all_data:
+            combined_df = pd.concat(all_data, ignore_index=True)
             
-            # Laden Sie die Kosten
+            # Laden der Kosten
             material_costs = load_material_costs()
             fulfillment_costs = load_fulfillment_costs()
             transaction_costs = load_transaction_costs()
             marketing_costs = load_marketing_costs()
             
-            # Erstellen Sie Auswahlfelder für Marktplatz und Land
-            unique_marketplaces = combined_df['Platform'].unique()
-            unique_countries = combined_df['CustomerCountry'].unique()
+            # Erstellen der Auswahlfelder für Marktplatz und Land
+            unique_marketplaces = ["Alle"] + list(combined_df['Platform'].unique())
+            unique_countries = ["Alle"] + list(combined_df['CustomerCountry'].unique())
             
-            selected_marketplace = st.selectbox("Marktplatz auswählen", ["Alle"] + list(unique_marketplaces))
-            selected_country = st.selectbox("Land auswählen", ["Alle"] + list(unique_countries))
+            col1, col2 = st.columns(2)
+            with col1:
+                st.session_state.selected_marketplace = st.selectbox("Marktplatz auswählen", unique_marketplaces, index=unique_marketplaces.index(st.session_state.selected_marketplace))
+            with col2:
+                st.session_state.selected_country = st.selectbox("Land auswählen", unique_countries, index=unique_countries.index(st.session_state.selected_country))
             
-            # Konvertieren Sie "Alle" zu None für die Filterfunktion
-            selected_marketplace = None if selected_marketplace == "Alle" else selected_marketplace
-            selected_country = None if selected_country == "Alle" else selected_country
+            # Filtern der Daten basierend auf den Auswahlfeldern
+            filtered_df = combined_df
+            if st.session_state.selected_marketplace != "Alle":
+                filtered_df = filtered_df[filtered_df['Platform'] == st.session_state.selected_marketplace]
+            if st.session_state.selected_country != "Alle":
+                filtered_df = filtered_df[filtered_df['CustomerCountry'] == st.session_state.selected_country]
             
-            if combined_df.empty:
-                st.warning("Die geladenen Daten sind leer.")
-                logger.warning("Combined DataFrame ist leer.")
+            if filtered_df.empty:
+                st.warning("Keine Daten für die ausgewählten Filter verfügbar.")
             elif material_costs.empty or fulfillment_costs.empty or transaction_costs.empty:
                 st.warning("Keine Material-, Fulfillment- oder Transaktionskosten gefunden.")
-                logger.warning("Material costs, Fulfillment costs oder Transaction costs DataFrame ist leer.")
             else:
-                overview_data = calculate_overview_data(combined_df, material_costs.set_index('SKU')['Cost'].to_dict(), fulfillment_costs, transaction_costs, selected_marketplace, selected_country)
+                overview_data = calculate_overview_data(filtered_df, material_costs.set_index('SKU')['Cost'].to_dict(), fulfillment_costs, transaction_costs)
                 
                 # Füge Marketingkosten hinzu
                 overview_data = pd.merge(overview_data, marketing_costs, left_on='Datum', right_on='Date', how='left')
@@ -181,37 +213,16 @@ def display_overview_table(start_date, end_date):
                 overview_data['Marketingkosten %'] = overview_data['Marketingkosten %'].round(1)
                 overview_data['Deckungsbeitrag 3'] = overview_data['Deckungsbeitrag 3'].round(2)
                 
-                if overview_data.empty:
-                    st.warning("Die berechnete Übersicht ist leer.")
-                    logger.warning("Berechnete Übersichtsdaten sind leer.")
-                else:
-                    # Transponiere die Daten
-                    transposed_data = transpose_overview_data(overview_data)
-                    
-                    # Erstelle eine leere Zeile mit der richtigen Anzahl von Spalten
-                    empty_row = pd.DataFrame([['']*len(transposed_data.columns)], columns=transposed_data.columns, index=[''])
-                    
-                    # Füge Leerzeilen hinzu
-                    final_data = pd.concat([
-                        transposed_data.iloc[:5],
-                        empty_row,
-                        transposed_data.iloc[5:9],
-                        empty_row,
-                        transposed_data.iloc[9:],
-                        empty_row
-                    ])
-                    
-                    # Zeige die transponierte Tabelle an
-                    st.dataframe(final_data, height=600, use_container_width=True)
-                    display_summary(overview_data)
+                # Transponiere die Daten und zeige sie an
+                transposed_data = transpose_overview_data(overview_data)
+                st.dataframe(transposed_data, height=600, use_container_width=True)
+                display_summary(overview_data)
         else:
             st.warning(f"Keine Daten für den ausgewählten Zeitraum verfügbar.")
             if missing_dates:
                 st.info(f"Fehlende Daten für folgende Tage: {', '.join(str(date) for date in missing_dates)}")
-            logger.warning(f"Keine Daten für den Zeitraum von {start_date} bis {end_date} gefunden.")
         
     except Exception as e:
-        logger.error(f"Fehler beim Verarbeiten der Daten: {str(e)}", exc_info=True)
         st.error(f"Fehler beim Verarbeiten der Daten: {str(e)}")
         st.error("Bitte überprüfen Sie die Logs für weitere Details.")
 
@@ -428,7 +439,6 @@ def fetch_and_process_data(date):
         st.success(f"Daten für {date} erfolgreich abgerufen, verarbeitet und gespeichert.")
         return df
     except Exception as e:
-        logger.error(f"Fehler beim Abrufen und Verarbeiten der Daten für {date}: {str(e)}")
         st.error(f"Fehler beim Abrufen und Verarbeiten der Daten für {date}. Bitte überprüfen Sie die Logs für weitere Details.")
         return None
 
@@ -519,24 +529,12 @@ def main():
                 end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
             
             if st.button("Daten abrufen"):
-                all_data = []
-                current_date = start_date
-                while current_date <= end_date:
-                    df = fetch_and_process_data(current_date)
-                    if df is not None:
-                        all_data.append(df)
-                    current_date += timedelta(days=1)
-                
-                if all_data:
-                    combined_df = pd.concat(all_data, ignore_index=True)
-                    st.write(combined_df)
+                df = fetch_data_for_range(start_date, end_date)
+                if df is not None:
+                    st.write(df)
     
     elif main_menu == "Übersicht":
-        st.subheader("Übersicht anzeigen")
-        start_date = st.date_input("Startdatum", datetime.now().date() - timedelta(days=7))
-        end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
-        if st.button("Übersichtstabelle anzeigen"):
-            display_overview_table(start_date, end_date)
+        display_overview_page()
     
     elif main_menu == "Inventory Management":
         inventory_option = st.sidebar.selectbox("Inventory Optionen", [
