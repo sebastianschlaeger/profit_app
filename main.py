@@ -162,16 +162,17 @@ def display_overview_table(start_date, end_date):
                 overview_data = calculate_overview_data(combined_df, material_costs.set_index('SKU')['Cost'].to_dict(), fulfillment_costs, transaction_costs)
                 
                 # Füge Marketingkosten hinzu
-                overview_data = pd.merge(overview_data, marketing_costs, left_on='Datum', right_on='Date', how='left')
-                overview_data['Marketingkosten'] = overview_data['Google Ads'] + overview_data['Amazon Ads'] + overview_data['Ebay Ads'] + overview_data['Kaufland Ads']
-                overview_data['Marketingkosten'] = overview_data['Marketingkosten'].fillna(0)
-                overview_data['Marketingkosten %'] = (overview_data['Marketingkosten'] / overview_data['Umsatz Netto']) * 100
-                overview_data['Deckungsbeitrag 3'] = overview_data['Deckungsbeitrag 2'] - overview_data['Marketingkosten']
+                marketing_costs['Date'] = pd.to_datetime(marketing_costs['Date']).dt.date
+                marketing_costs = marketing_costs.set_index('Date')
+                overview_data = overview_data.join(marketing_costs, how='left')
+                overview_data['Marketingkosten'] = overview_data[['Google Ads', 'Amazon Ads', 'Ebay Ads', 'Kaufland Ads']].sum(axis=1)
+                overview_data['Marketingkosten %'] = (overview_data['Marketingkosten'] / overview_data.loc['Umsatz Netto']) * 100
+                overview_data.loc['Deckungsbeitrag 3'] = overview_data.loc['Deckungsbeitrag 2'] - overview_data.loc['Marketingkosten']
                 
                 # Runde die neuen Spalten
-                overview_data['Marketingkosten'] = overview_data['Marketingkosten'].round(2)
-                overview_data['Marketingkosten %'] = overview_data['Marketingkosten %'].round(1)
-                overview_data['Deckungsbeitrag 3'] = overview_data['Deckungsbeitrag 3'].round(2)
+                overview_data.loc['Marketingkosten'] = overview_data.loc['Marketingkosten'].round(2)
+                overview_data.loc['Marketingkosten %'] = overview_data.loc['Marketingkosten %'].round(1)
+                overview_data.loc['Deckungsbeitrag 3'] = overview_data.loc['Deckungsbeitrag 3'].round(2)
                 
                 if overview_data.empty:
                     st.warning("Die berechnete Übersicht ist leer.")
@@ -184,13 +185,6 @@ def display_overview_table(start_date, end_date):
             if missing_dates:
                 st.info(f"Fehlende Daten für folgende Tage: {', '.join(str(date) for date in missing_dates)}")
             logger.warning(f"Keine Daten für den Zeitraum von {start_date} bis {end_date} gefunden.")
-        
-        # Zusätzliche Debugging-Informationen
-        st.subheader("Debugging-Informationen:")
-        st.write(f"Startdatum: {start_date}")
-        st.write(f"Enddatum: {end_date}")
-        st.write(f"Anzahl der geladenen Datensätze: {sum(len(df) for df in all_data)}")
-        st.write(f"Anzahl der Tage ohne Daten: {len(missing_dates)}")
         
     except Exception as e:
         logger.error(f"Fehler beim Verarbeiten der Daten: {str(e)}", exc_info=True)
@@ -262,7 +256,7 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
             'FulfillmentCost': 'sum',
             'ShippingCost': 'sum',
             'TransactionCost': 'sum'
-        }).reset_index()
+        })
         
         # Berechne die zusätzlichen Metriken
         grouped['UmsatzNetto'] = grouped['TotalOrderPrice'] - grouped['TaxAmount']
@@ -273,30 +267,27 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
         grouped['TransaktionskostenProzent'] = (grouped['TransactionCost'] / grouped['UmsatzNetto']) * 100
         grouped['Deckungsbeitrag2'] = grouped['Deckungsbeitrag1'] - grouped['GesamtkostenFulfillment'] - grouped['TransactionCost']
         
-        # Formatiere die Tabelle
-        result = grouped.rename(columns={
-            'CreatedAt': 'Datum',
-            'TotalOrderPrice': 'Umsatz Brutto',
-            'UmsatzNetto': 'Umsatz Netto',
-            'MaterialCost': 'Materialkosten',
-            'MaterialkostenProzent': 'Materialkosten %',
-            'Deckungsbeitrag1': 'Deckungsbeitrag 1',
-            'FulfillmentCost': 'Fulfillment-Kosten',
-            'ShippingCost': 'Versandkosten',
-            'GesamtkostenFulfillment': 'Gesamtkosten Fulfillment €',
-            'GesamtkostenFulfillmentProzent': 'Gesamtkosten Fulfillment %',
-            'TransactionCost': 'Transaktionskosten',
-            'TransaktionskostenProzent': 'Transaktionskosten %',
-            'Deckungsbeitrag2': 'Deckungsbeitrag 2'
-        })
+        # Erstelle ein DataFrame mit den gewünschten Metriken
+        result = pd.DataFrame({
+            'Umsatz Brutto': grouped['TotalOrderPrice'],
+            'Umsatz Netto': grouped['UmsatzNetto'],
+            'Materialkosten': grouped['MaterialCost'],
+            'Materialkosten %': grouped['MaterialkostenProzent'],
+            'Deckungsbeitrag 1': grouped['Deckungsbeitrag1'],
+            'Fulfillment-Kosten': grouped['FulfillmentCost'],
+            'Versandkosten': grouped['ShippingCost'],
+            'Gesamtkosten Fulfillment €': grouped['GesamtkostenFulfillment'],
+            'Gesamtkosten Fulfillment %': grouped['GesamtkostenFulfillmentProzent'],
+            'Transaktionskosten': grouped['TransactionCost'],
+            'Transaktionskosten %': grouped['TransaktionskostenProzent'],
+            'Deckungsbeitrag 2': grouped['Deckungsbeitrag2']
+        }).T  # Transponiere das DataFrame
         
         # Runde die Zahlen
-        for col in ['Umsatz Brutto', 'Umsatz Netto', 'Materialkosten', 'Deckungsbeitrag 1', 
-                    'Fulfillment-Kosten', 'Versandkosten', 'Gesamtkosten Fulfillment €', 
-                    'Transaktionskosten', 'Deckungsbeitrag 2']:
-            result[col] = result[col].round(2)
-        for col in ['Materialkosten %', 'Gesamtkosten Fulfillment %', 'Transaktionskosten %']:
-            result[col] = result[col].round(1)
+        result = result.round(2)
+        result.loc['Materialkosten %'] = result.loc['Materialkosten %'].round(1)
+        result.loc['Gesamtkosten Fulfillment %'] = result.loc['Gesamtkosten Fulfillment %'].round(1)
+        result.loc['Transaktionskosten %'] = result.loc['Transaktionskosten %'].round(1)
         
         return result
     except Exception as e:
@@ -304,19 +295,19 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
         raise
         
 def display_summary(overview_data):
-    total_gross_revenue = overview_data['Umsatz Brutto'].sum()
-    total_net_revenue = overview_data['Umsatz Netto'].sum()
-    total_material_cost = overview_data['Materialkosten'].sum()
+    total_gross_revenue = overview_data.loc['Umsatz Brutto'].sum()
+    total_net_revenue = overview_data.loc['Umsatz Netto'].sum()
+    total_material_cost = overview_data.loc['Materialkosten'].sum()
     total_material_cost_percentage = (total_material_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
-    total_contribution_margin_1 = overview_data['Deckungsbeitrag 1'].sum()
-    total_fulfillment_cost = overview_data['Gesamtkosten Fulfillment €'].sum()
+    total_contribution_margin_1 = overview_data.loc['Deckungsbeitrag 1'].sum()
+    total_fulfillment_cost = overview_data.loc['Gesamtkosten Fulfillment €'].sum()
     total_fulfillment_cost_percentage = (total_fulfillment_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
-    total_transaction_cost = overview_data['Transaktionskosten'].sum()
+    total_transaction_cost = overview_data.loc['Transaktionskosten'].sum()
     total_transaction_cost_percentage = (total_transaction_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
-    total_contribution_margin_2 = overview_data['Deckungsbeitrag 2'].sum()
-    total_marketing_cost = overview_data['Marketingkosten'].sum()
+    total_contribution_margin_2 = overview_data.loc['Deckungsbeitrag 2'].sum()
+    total_marketing_cost = overview_data.loc['Marketingkosten'].sum()
     total_marketing_cost_percentage = (total_marketing_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
-    total_contribution_margin_3 = overview_data['Deckungsbeitrag 3'].sum()
+    total_contribution_margin_3 = overview_data.loc['Deckungsbeitrag 3'].sum()
     
     st.subheader("Zusammenfassung:")
     col1, col2 = st.columns(2)
@@ -343,7 +334,6 @@ def display_summary(overview_data):
     st.write(f"DB1 Marge: {db1_margin:.1f}%")
     st.write(f"DB2 Marge: {db2_margin:.1f}%")
     st.write(f"DB3 Marge: {db3_margin:.1f}%")
-
 
 def fetch_and_process_data(date):
     try:
