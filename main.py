@@ -143,10 +143,22 @@ def display_overview_table(start_date, end_date):
             combined_df = pd.concat(all_data, ignore_index=True)
             logger.info(f"Gesamtanzahl der geladenen Datensätze: {len(combined_df)}")
             
+            # Laden Sie die Kosten
             material_costs = load_material_costs()
             fulfillment_costs = load_fulfillment_costs()
             transaction_costs = load_transaction_costs()
             marketing_costs = load_marketing_costs()
+            
+            # Erstellen Sie Auswahlfelder für Marktplatz und Land
+            unique_marketplaces = combined_df['Platform'].unique()
+            unique_countries = combined_df['CustomerCountry'].unique()
+            
+            selected_marketplace = st.selectbox("Marktplatz auswählen", ["Alle"] + list(unique_marketplaces))
+            selected_country = st.selectbox("Land auswählen", ["Alle"] + list(unique_countries))
+            
+            # Konvertieren Sie "Alle" zu None für die Filterfunktion
+            selected_marketplace = None if selected_marketplace == "Alle" else selected_marketplace
+            selected_country = None if selected_country == "Alle" else selected_country
             
             if combined_df.empty:
                 st.warning("Die geladenen Daten sind leer.")
@@ -155,7 +167,7 @@ def display_overview_table(start_date, end_date):
                 st.warning("Keine Material-, Fulfillment- oder Transaktionskosten gefunden.")
                 logger.warning("Material costs, Fulfillment costs oder Transaction costs DataFrame ist leer.")
             else:
-                overview_data = calculate_overview_data(combined_df, material_costs.set_index('SKU')['Cost'].to_dict(), fulfillment_costs, transaction_costs)
+                overview_data = calculate_overview_data(combined_df, material_costs.set_index('SKU')['Cost'].to_dict(), fulfillment_costs, transaction_costs, selected_marketplace, selected_country)
                 
                 # Füge Marketingkosten hinzu
                 overview_data = pd.merge(overview_data, marketing_costs, left_on='Datum', right_on='Date', how='left')
@@ -198,13 +210,6 @@ def display_overview_table(start_date, end_date):
                 st.info(f"Fehlende Daten für folgende Tage: {', '.join(str(date) for date in missing_dates)}")
             logger.warning(f"Keine Daten für den Zeitraum von {start_date} bis {end_date} gefunden.")
         
-        # Zusätzliche Debugging-Informationen
-        st.subheader("Debugging-Informationen:")
-        st.write(f"Startdatum: {start_date}")
-        st.write(f"Enddatum: {end_date}")
-        st.write(f"Anzahl der geladenen Datensätze: {sum(len(df) for df in all_data)}")
-        st.write(f"Anzahl der Tage ohne Daten: {len(missing_dates)}")
-        
     except Exception as e:
         logger.error(f"Fehler beim Verarbeiten der Daten: {str(e)}", exc_info=True)
         st.error(f"Fehler beim Verarbeiten der Daten: {str(e)}")
@@ -242,10 +247,16 @@ def extract_skus_and_quantities(order_items):
         logger.error(f"Problematische order_items: {order_items}")
         return []
 
-def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, transaction_costs):
+def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, transaction_costs, selected_marketplace=None, selected_country=None):
     try:
         billbee_data['CreatedAt'] = pd.to_datetime(billbee_data['CreatedAt']).dt.date
         billbee_data['OrderItems'] = billbee_data['OrderItems'].apply(json.loads)
+        
+        # Filter nach Marktplatz und Land
+        if selected_marketplace:
+            billbee_data = billbee_data[billbee_data['Platform'] == selected_marketplace]
+        if selected_country:
+            billbee_data = billbee_data[billbee_data['CustomerCountry'] == selected_country]
         
         # Berechne Materialkosten
         def calculate_material_cost(order_items):
