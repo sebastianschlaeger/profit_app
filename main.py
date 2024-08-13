@@ -177,7 +177,7 @@ def display_overview_table(start_date, end_date):
                     transposed_data = transpose_overview_data(overview_data)
                     
                     # Zeige die transponierte Tabelle an
-                    st.dataframe(transposed_data)
+                    st.dataframe(transposed_data.style.set_properties(**{'text-align': 'right'}))
                     display_summary(overview_data)
         else:
             st.warning(f"Keine Daten für den ausgewählten Zeitraum verfügbar.")
@@ -307,6 +307,9 @@ def transpose_overview_data(overview_data):
     # Entferne die TaxAmount Spalte
     overview_data = overview_data.drop('TaxAmount', axis=1, errors='ignore')
     
+    # Berechne Deckungsbeitrag 3 %
+    overview_data['Deckungsbeitrag 3 %'] = (overview_data['Deckungsbeitrag 3'] / overview_data['Umsatz Netto']) * 100
+    
     # Setze das Datum als Index
     overview_data_indexed = overview_data.set_index('Datum')
     
@@ -329,11 +332,22 @@ def transpose_overview_data(overview_data):
         'Deckungsbeitrag 2',
         'Marketingkosten',
         'Marketingkosten %',
-        'Deckungsbeitrag 3'
+        'Deckungsbeitrag 3',
+        'Deckungsbeitrag 3 %'
     ]
     
     # Sortiere die Daten entsprechend der gewünschten Reihenfolge
     transposed_data = transposed_data.reindex(desired_order)
+    
+    # Formatiere die Daten
+    percentage_rows = ['Materialkosten %', 'Gesamtkosten Fulfillment %', 'Transaktionskosten %', 'Marketingkosten %', 'Deckungsbeitrag 3 %']
+    euro_rows = [row for row in desired_order if row not in percentage_rows]
+    
+    for row in percentage_rows:
+        transposed_data.loc[row] = transposed_data.loc[row].apply(lambda x: f"{x:.0f}%")
+    
+    for row in euro_rows:
+        transposed_data.loc[row] = transposed_data.loc[row].apply(lambda x: f"{x:.0f} €")
     
     return transposed_data
 
