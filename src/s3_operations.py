@@ -3,7 +3,6 @@ from src.s3_utils import get_s3_fs
 import logging
 import streamlit as st
 from io import StringIO
-from src.error_handler import handle_error, DataFetchError
 
 logger = logging.getLogger(__name__)
 

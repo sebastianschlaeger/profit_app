@@ -2,7 +2,6 @@ import pandas as pd
 from src.s3_utils import get_s3_fs
 import streamlit as st
 import logging
-from src.error_handler import handle_error, DataFetchError
 
 logger = logging.getLogger(__name__)
 

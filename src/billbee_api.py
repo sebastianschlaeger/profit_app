@@ -2,7 +2,6 @@ import requests
 from datetime import datetime, timedelta
 import streamlit as st
 import logging
-from src.error_handler import handle_error, DataFetchError
 
 logger = logging.getLogger(__name__)
 
