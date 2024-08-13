@@ -139,7 +139,7 @@ def display_overview_table(start_date, end_date):
                 logger.warning(f"Keine Daten für {current_date} gefunden.")
             current_date += timedelta(days=1)
         
-       if all_data:
+        if all_data:
             combined_df = pd.concat(all_data, ignore_index=True)
             logger.info(f"Gesamtanzahl der geladenen Datensätze: {len(combined_df)}")
             
