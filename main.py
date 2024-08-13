@@ -176,8 +176,19 @@ def display_overview_table(start_date, end_date):
                     # Transponiere die Daten
                     transposed_data = transpose_overview_data(overview_data)
                     
+                    # Füge Leerzeilen hinzu
+                    empty_rows = pd.DataFrame([''] * len(transposed_data.columns), columns=transposed_data.columns, index=[''])
+                    final_data = pd.concat([
+                        transposed_data.iloc[:5],
+                        empty_rows,
+                        transposed_data.iloc[5:9],
+                        empty_rows,
+                        transposed_data.iloc[9:],
+                        empty_rows
+                    ])
+                    
                     # Zeige die transponierte Tabelle an
-                    st.dataframe(transposed_data.style.set_properties(**{'text-align': 'right'}), height=600, use_container_width=True)
+                    st.dataframe(final_data, height=600, use_container_width=True)
                     display_summary(overview_data)
         else:
             st.warning(f"Keine Daten für den ausgewählten Zeitraum verfügbar.")
@@ -323,35 +334,29 @@ def transpose_overview_data(overview_data):
         'Materialkosten',
         'Materialkosten %',
         'Deckungsbeitrag 1',
-        '',  # Leerzeile
         'Fulfillment-Kosten',
         'Versandkosten',
         'Transaktionskosten',
         'Deckungsbeitrag 2',
-        '',  # Leerzeile
         'Marketingkosten',
         'Deckungsbeitrag 3',
-        'Deckungsbeitrag 3 %',
-        ''  # Leerzeile
+        'Deckungsbeitrag 3 %'
     ]
     
-    # Erstelle ein neues DataFrame mit der gewünschten Reihenfolge und füge Leerzeilen hinzu
-    new_data = pd.DataFrame(index=desired_order, columns=transposed_data.columns)
-    for row in desired_order:
-        if row in transposed_data.index:
-            new_data.loc[row] = transposed_data.loc[row]
+    # Sortiere die Daten entsprechend der gewünschten Reihenfolge
+    transposed_data = transposed_data.reindex(desired_order)
     
     # Formatiere die Daten
     percentage_rows = ['Materialkosten %', 'Deckungsbeitrag 3 %']
-    euro_rows = [row for row in desired_order if row and row not in percentage_rows]
+    euro_rows = [row for row in desired_order if row not in percentage_rows]
     
     for row in percentage_rows:
-        new_data.loc[row] = new_data.loc[row].apply(lambda x: f"{x:.0f}%" if pd.notnull(x) else "")
+        transposed_data.loc[row] = transposed_data.loc[row].apply(lambda x: f"{x:.0f}%" if pd.notnull(x) else "")
     
     for row in euro_rows:
-        new_data.loc[row] = new_data.loc[row].apply(lambda x: f"{x:.0f} €" if pd.notnull(x) else "")
+        transposed_data.loc[row] = transposed_data.loc[row].apply(lambda x: f"{x:.0f} €" if pd.notnull(x) else "")
     
-    return new_data
+    return transposed_data
 
 def display_summary(overview_data):
     total_gross_revenue = overview_data['Umsatz Brutto'].sum()
