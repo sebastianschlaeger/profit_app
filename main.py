@@ -139,7 +139,7 @@ def display_overview_table(start_date, end_date):
                 logger.warning(f"Keine Daten für {current_date} gefunden.")
             current_date += timedelta(days=1)
         
-        if all_data:
+       if all_data:
             combined_df = pd.concat(all_data, ignore_index=True)
             logger.info(f"Gesamtanzahl der geladenen Datensätze: {len(combined_df)}")
             
@@ -147,10 +147,6 @@ def display_overview_table(start_date, end_date):
             fulfillment_costs = load_fulfillment_costs()
             transaction_costs = load_transaction_costs()
             marketing_costs = load_marketing_costs()
-            logger.info(f"Anzahl der geladenen Materialkosten: {len(material_costs)}")
-            logger.info(f"Fulfillment-Kosten geladen: {fulfillment_costs.to_dict()}")
-            logger.info(f"Transaktionskosten geladen: {transaction_costs.to_dict()}")
-            logger.info(f"Marketingkosten geladen: {len(marketing_costs)}")
             
             if combined_df.empty:
                 st.warning("Die geladenen Daten sind leer.")
@@ -177,7 +173,11 @@ def display_overview_table(start_date, end_date):
                     st.warning("Die berechnete Übersicht ist leer.")
                     logger.warning("Berechnete Übersichtsdaten sind leer.")
                 else:
-                    st.dataframe(overview_data)
+                    # Transponiere die Daten
+                    transposed_data = transpose_overview_data(overview_data)
+                    
+                    # Zeige die transponierte Tabelle an
+                    st.dataframe(transposed_data)
                     display_summary(overview_data)
         else:
             st.warning(f"Keine Daten für den ausgewählten Zeitraum verfügbar.")
@@ -302,7 +302,23 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
     except Exception as e:
         logger.error(f"Fehler bei der Berechnung der Übersichtsdaten: {str(e)}", exc_info=True)
         raise
-        
+
+def transpose_overview_data(overview_data):
+    # Setze das Datum als Index
+    overview_data_indexed = overview_data.set_index('Datum')
+    
+    # Transponiere die Daten
+    transposed_data = overview_data_indexed.transpose()
+    
+    # Füge eine neue Spalte 'Metrik' hinzu, die den ursprünglichen Spaltennamen enthält
+    transposed_data['Metrik'] = transposed_data.index
+    
+    # Setze 'Metrik' als erste Spalte
+    columns = ['Metrik'] + [col for col in transposed_data.columns if col != 'Metrik']
+    transposed_data = transposed_data[columns]
+    
+    return transposed_data
+
 def display_summary(overview_data):
     total_gross_revenue = overview_data['Umsatz Brutto'].sum()
     total_net_revenue = overview_data['Umsatz Netto'].sum()
