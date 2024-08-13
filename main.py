@@ -304,18 +304,36 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
         raise
 
 def transpose_overview_data(overview_data):
+    # Entferne die TaxAmount Spalte
+    overview_data = overview_data.drop('TaxAmount', axis=1, errors='ignore')
+    
     # Setze das Datum als Index
     overview_data_indexed = overview_data.set_index('Datum')
     
     # Transponiere die Daten
     transposed_data = overview_data_indexed.transpose()
     
-    # Füge eine neue Spalte 'Metrik' hinzu, die den ursprünglichen Spaltennamen enthält
-    transposed_data['Metrik'] = transposed_data.index
+    # Definiere die gewünschte Reihenfolge der Zeilen
+    desired_order = [
+        'Umsatz Brutto',
+        'Umsatz Netto',
+        'Materialkosten',
+        'Materialkosten %',
+        'Deckungsbeitrag 1',
+        'Fulfillment-Kosten',
+        'Versandkosten',
+        'Gesamtkosten Fulfillment €',
+        'Gesamtkosten Fulfillment %',
+        'Transaktionskosten',
+        'Transaktionskosten %',
+        'Deckungsbeitrag 2',
+        'Marketingkosten',
+        'Marketingkosten %',
+        'Deckungsbeitrag 3'
+    ]
     
-    # Setze 'Metrik' als erste Spalte
-    columns = ['Metrik'] + [col for col in transposed_data.columns if col != 'Metrik']
-    transposed_data = transposed_data[columns]
+    # Sortiere die Daten entsprechend der gewünschten Reihenfolge
+    transposed_data = transposed_data.reindex(desired_order)
     
     return transposed_data
 
