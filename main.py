@@ -427,11 +427,12 @@ def manage_marketing_costs():
 def main():
     st.title("E-Commerce Profitabilitäts-App")
     
+    # Sidebar-Menü
     st.sidebar.title("Navigation")
     main_menu = st.sidebar.selectbox("Hauptmenü", ["Daten", "Übersicht", "Inventory Management"])
     
     if main_menu == "Daten":
-        data_option = display_data_options()
+        data_option = st.sidebar.radio("Daten Optionen", ["Daten von gestern abrufen", "Daten für Zeitraum abrufen"])
         
         if data_option == "Daten von gestern abrufen":
             st.subheader("Daten von gestern abrufen")
@@ -443,14 +444,29 @@ def main():
         
         elif data_option == "Daten für Zeitraum abrufen":
             st.subheader("Daten für Zeitraum abrufen")
-            start_date, end_date = display_date_range_input()
+            col1, col2 = st.columns(2)
+            with col1:
+                start_date = st.date_input("Startdatum", datetime.now().date() - timedelta(days=7))
+            with col2:
+                end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
             
             if st.button("Daten abrufen"):
-                fetch_data_for_range(start_date, end_date)
+                all_data = []
+                current_date = start_date
+                while current_date <= end_date:
+                    df = fetch_and_process_data(current_date)
+                    if df is not None:
+                        all_data.append(df)
+                    current_date += timedelta(days=1)
+                
+                if all_data:
+                    combined_df = pd.concat(all_data, ignore_index=True)
+                    st.write(combined_df)
     
     elif main_menu == "Übersicht":
         st.subheader("Übersicht anzeigen")
-        start_date, end_date = display_date_range_input()
+        start_date = st.date_input("Startdatum", datetime.now().date() - timedelta(days=7))
+        end_date = st.date_input("Enddatum", datetime.now().date() - timedelta(days=1))
         if st.button("Übersichtstabelle anzeigen"):
             display_overview_table(start_date, end_date)
     
