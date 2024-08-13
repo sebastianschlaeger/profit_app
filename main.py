@@ -176,15 +176,17 @@ def display_overview_table(start_date, end_date):
                     # Transponiere die Daten
                     transposed_data = transpose_overview_data(overview_data)
                     
+                    # Erstelle eine leere Zeile mit der richtigen Anzahl von Spalten
+                    empty_row = pd.DataFrame([['']*len(transposed_data.columns)], columns=transposed_data.columns, index=[''])
+                    
                     # Füge Leerzeilen hinzu
-                    empty_rows = pd.DataFrame([''] * len(transposed_data.columns), columns=transposed_data.columns, index=[''])
                     final_data = pd.concat([
                         transposed_data.iloc[:5],
-                        empty_rows,
+                        empty_row,
                         transposed_data.iloc[5:9],
-                        empty_rows,
+                        empty_row,
                         transposed_data.iloc[9:],
-                        empty_rows
+                        empty_row
                     ])
                     
                     # Zeige die transponierte Tabelle an
