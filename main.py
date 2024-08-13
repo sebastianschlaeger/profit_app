@@ -177,7 +177,7 @@ def display_overview_table(start_date, end_date):
                     transposed_data = transpose_overview_data(overview_data)
                     
                     # Zeige die transponierte Tabelle an
-                    st.dataframe(transposed_data.style.set_properties(**{'text-align': 'right'}))
+                    st.dataframe(transposed_data.style.set_properties(**{'text-align': 'right'}), height=600, use_container_width=True)
                     display_summary(overview_data)
         else:
             st.warning(f"Keine Daten für den ausgewählten Zeitraum verfügbar.")
@@ -323,33 +323,35 @@ def transpose_overview_data(overview_data):
         'Materialkosten',
         'Materialkosten %',
         'Deckungsbeitrag 1',
+        '',  # Leerzeile
         'Fulfillment-Kosten',
         'Versandkosten',
-        'Gesamtkosten Fulfillment €',
-        'Gesamtkosten Fulfillment %',
         'Transaktionskosten',
-        'Transaktionskosten %',
         'Deckungsbeitrag 2',
+        '',  # Leerzeile
         'Marketingkosten',
-        'Marketingkosten %',
         'Deckungsbeitrag 3',
-        'Deckungsbeitrag 3 %'
+        'Deckungsbeitrag 3 %',
+        ''  # Leerzeile
     ]
     
-    # Sortiere die Daten entsprechend der gewünschten Reihenfolge
-    transposed_data = transposed_data.reindex(desired_order)
+    # Erstelle ein neues DataFrame mit der gewünschten Reihenfolge und füge Leerzeilen hinzu
+    new_data = pd.DataFrame(index=desired_order, columns=transposed_data.columns)
+    for row in desired_order:
+        if row in transposed_data.index:
+            new_data.loc[row] = transposed_data.loc[row]
     
     # Formatiere die Daten
-    percentage_rows = ['Materialkosten %', 'Gesamtkosten Fulfillment %', 'Transaktionskosten %', 'Marketingkosten %', 'Deckungsbeitrag 3 %']
-    euro_rows = [row for row in desired_order if row not in percentage_rows]
+    percentage_rows = ['Materialkosten %', 'Deckungsbeitrag 3 %']
+    euro_rows = [row for row in desired_order if row and row not in percentage_rows]
     
     for row in percentage_rows:
-        transposed_data.loc[row] = transposed_data.loc[row].apply(lambda x: f"{x:.0f}%")
+        new_data.loc[row] = new_data.loc[row].apply(lambda x: f"{x:.0f}%" if pd.notnull(x) else "")
     
     for row in euro_rows:
-        transposed_data.loc[row] = transposed_data.loc[row].apply(lambda x: f"{x:.0f} €")
+        new_data.loc[row] = new_data.loc[row].apply(lambda x: f"{x:.0f} €" if pd.notnull(x) else "")
     
-    return transposed_data
+    return new_data
 
 def display_summary(overview_data):
     total_gross_revenue = overview_data['Umsatz Brutto'].sum()
