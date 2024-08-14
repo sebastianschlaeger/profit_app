@@ -180,30 +180,29 @@ def display_filtered_overview_table():
         if all_data:
             combined_df = pd.concat(all_data, ignore_index=True)
             
-            # Debugging: Zeige unique Werte in der Platform-Spalte
-            st.write("Unique Platforms:", combined_df['Platform'].unique())
-            
             # Laden der Kosten
             material_costs = load_material_costs()
             fulfillment_costs = load_fulfillment_costs()
             transaction_costs = load_transaction_costs()
             marketing_costs = load_marketing_costs()
             
-            # Debugging: Zeige die ersten Zeilen der Marketingkosten
-            st.write("Marketing Costs Sample:", marketing_costs.head())
-            
             # Erstellen der Auswahlfelder für Marktplatz
             unique_marketplaces = ["Alle"] + list(combined_df['Platform'].unique())
             
-            st.session_state.selected_marketplace = st.selectbox("Marktplatz auswählen", unique_marketplaces, index=unique_marketplaces.index(st.session_state.selected_marketplace))
+            # Ersetze 'eBay' durch 'Ebay' in der Liste der Marktplätze
+            unique_marketplaces = ['Ebay' if x == 'eBay' else x for x in unique_marketplaces]
             
-            # Debugging: Zeige den ausgewählten Marktplatz
-            st.write("Selected Marketplace:", st.session_state.selected_marketplace)
+            st.session_state.selected_marketplace = st.selectbox(
+                "Marktplatz auswählen", 
+                unique_marketplaces, 
+                index=unique_marketplaces.index(st.session_state.selected_marketplace) if st.session_state.selected_marketplace in unique_marketplaces else 0
+            )
             
             # Filtern der Daten basierend auf dem ausgewählten Marktplatz
             filtered_df = combined_df
             if st.session_state.selected_marketplace != "Alle":
-                filtered_df = filtered_df[filtered_df['Platform'] == st.session_state.selected_marketplace]
+                # Berücksichtige beide Schreibweisen beim Filtern
+                filtered_df = filtered_df[filtered_df['Platform'].isin(['Ebay', 'eBay']) if st.session_state.selected_marketplace == 'Ebay' else (filtered_df['Platform'] == st.session_state.selected_marketplace)]
             
             # Debugging: Zeige die Anzahl der gefilterten Zeilen
             st.write("Filtered Data Rows:", len(filtered_df))
