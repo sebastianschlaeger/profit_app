@@ -177,25 +177,18 @@ def display_filtered_overview_table():
             transaction_costs = load_transaction_costs()
             marketing_costs = load_marketing_costs()
             
-            # Erstellen der Auswahlfelder für Marktplatz und Land
+            # Erstellen der Auswahlfelder für Marktplatz
             unique_marketplaces = ["Alle"] + list(combined_df['Platform'].unique())
-            unique_countries = ["Alle"] + list(combined_df['CustomerCountry'].unique())
             
-            col1, col2 = st.columns(2)
-            with col1:
-                st.session_state.selected_marketplace = st.selectbox("Marktplatz auswählen", unique_marketplaces, index=unique_marketplaces.index(st.session_state.selected_marketplace))
-            with col2:
-                st.session_state.selected_country = st.selectbox("Land auswählen", unique_countries, index=unique_countries.index(st.session_state.selected_country))
+            st.session_state.selected_marketplace = st.selectbox("Marktplatz auswählen", unique_marketplaces, index=unique_marketplaces.index(st.session_state.selected_marketplace))
             
-            # Filtern der Daten basierend auf den Auswahlfeldern
+            # Filtern der Daten basierend auf dem ausgewählten Marktplatz
             filtered_df = combined_df
             if st.session_state.selected_marketplace != "Alle":
                 filtered_df = filtered_df[filtered_df['Platform'] == st.session_state.selected_marketplace]
-            if st.session_state.selected_country != "Alle":
-                filtered_df = filtered_df[filtered_df['CustomerCountry'] == st.session_state.selected_country]
             
             if filtered_df.empty:
-                st.warning("Keine Daten für die ausgewählten Filter verfügbar.")
+                st.warning("Keine Daten für den ausgewählten Filter verfügbar.")
             elif material_costs.empty or fulfillment_costs.empty or transaction_costs.empty:
                 st.warning("Keine Material-, Fulfillment- oder Transaktionskosten gefunden.")
             else:
@@ -203,7 +196,19 @@ def display_filtered_overview_table():
                 
                 # Füge Marketingkosten hinzu
                 overview_data = pd.merge(overview_data, marketing_costs, left_on='Datum', right_on='Date', how='left')
-                overview_data['Marketingkosten'] = overview_data['Google Ads'] + overview_data['Amazon Ads'] + overview_data['Ebay Ads'] + overview_data['Kaufland Ads']
+                
+                # Wähle die entsprechende Marketingkostenspalte basierend auf dem ausgewählten Marktplatz
+                if st.session_state.selected_marketplace == 'Shopify':
+                    overview_data['Marketingkosten'] = overview_data['Google Ads']
+                elif st.session_state.selected_marketplace == 'Amazon':
+                    overview_data['Marketingkosten'] = overview_data['Amazon Ads']
+                elif st.session_state.selected_marketplace == 'Ebay':
+                    overview_data['Marketingkosten'] = overview_data['Ebay Ads']
+                elif st.session_state.selected_marketplace == 'Kaufland':
+                    overview_data['Marketingkosten'] = overview_data['Kaufland Ads']
+                else:
+                    overview_data['Marketingkosten'] = overview_data['Google Ads'] + overview_data['Amazon Ads'] + overview_data['Ebay Ads'] + overview_data['Kaufland Ads']
+                
                 overview_data['Marketingkosten'] = overview_data['Marketingkosten'].fillna(0)
                 overview_data['Marketingkosten %'] = (overview_data['Marketingkosten'] / overview_data['Umsatz Netto']) * 100
                 overview_data['Deckungsbeitrag 3'] = overview_data['Deckungsbeitrag 2'] - overview_data['Marketingkosten']
@@ -355,14 +360,21 @@ def transpose_overview_data(overview_data):
     desired_order = [
         'Umsatz Brutto',
         'Umsatz Netto',
+        '',  # Leerzeile
         'Materialkosten',
         'Materialkosten %',
         'Deckungsbeitrag 1',
+        '',  # Leerzeile
         'Fulfillment-Kosten',
         'Versandkosten',
+        'Gesamtkosten Fulfillment €',
+        'Gesamtkosten Fulfillment %',
         'Transaktionskosten',
+        'Transaktionskosten %',
         'Deckungsbeitrag 2',
+        '',  # Leerzeile
         'Marketingkosten',
+        'Marketingkosten %',
         'Deckungsbeitrag 3',
         'Deckungsbeitrag 3 %'
     ]
@@ -371,52 +383,46 @@ def transpose_overview_data(overview_data):
     transposed_data = transposed_data.reindex(desired_order)
     
     # Formatiere die Daten
-    percentage_rows = ['Materialkosten %', 'Deckungsbeitrag 3 %']
-    euro_rows = [row for row in desired_order if row not in percentage_rows]
+    percentage_rows = ['Materialkosten %', 'Gesamtkosten Fulfillment %', 'Transaktionskosten %', 'Marketingkosten %', 'Deckungsbeitrag 3 %']
+    euro_rows = [row for row in desired_order if row not in percentage_rows and row != '']
     
     for row in percentage_rows:
-        transposed_data.loc[row] = transposed_data.loc[row].apply(lambda x: f"{x:.0f}%" if pd.notnull(x) else "")
+        transposed_data.loc[row] = transposed_data.loc[row].apply(lambda x: f"{x:.1f}%" if pd.notnull(x) else "")
     
     for row in euro_rows:
-        transposed_data.loc[row] = transposed_data.loc[row].apply(lambda x: f"{x:.0f} €" if pd.notnull(x) else "")
+        transposed_data.loc[row] = transposed_data.loc[row].apply(lambda x: f"{x:.2f} €" if pd.notnull(x) else "")
     
     return transposed_data
 
 def display_summary(overview_data):
-    total_gross_revenue = overview_data['Umsatz Brutto'].sum()
-    total_net_revenue = overview_data['Umsatz Netto'].sum()
-    total_material_cost = overview_data['Materialkosten'].sum()
-    total_material_cost_percentage = (total_material_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
-    total_contribution_margin_1 = overview_data['Deckungsbeitrag 1'].sum()
-    total_fulfillment_cost = overview_data['Gesamtkosten Fulfillment €'].sum()
-    total_fulfillment_cost_percentage = (total_fulfillment_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
-    total_transaction_cost = overview_data['Transaktionskosten'].sum()
-    total_transaction_cost_percentage = (total_transaction_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
-    total_contribution_margin_2 = overview_data['Deckungsbeitrag 2'].sum()
-    total_marketing_cost = overview_data['Marketingkosten'].sum()
-    total_marketing_cost_percentage = (total_marketing_cost / total_net_revenue) * 100 if total_net_revenue != 0 else 0
-    total_contribution_margin_3 = overview_data['Deckungsbeitrag 3'].sum()
-    
     st.subheader("Zusammenfassung:")
-    col1, col2 = st.columns(2)
     
-    with col1:
-        st.write(f"Umsatz Brutto: {total_gross_revenue:.2f} EUR")
-        st.write(f"Umsatz Netto: {total_net_revenue:.2f} EUR")
-        st.write(f"Materialkosten: {total_material_cost:.2f} EUR ({total_material_cost_percentage:.1f}%)")
-        st.write(f"Deckungsbeitrag 1: {total_contribution_margin_1:.2f} EUR")
-        st.write(f"Fulfillment-Kosten: {total_fulfillment_cost:.2f} EUR ({total_fulfillment_cost_percentage:.1f}%)")
+    summary_items = [
+        ('Umsatz Brutto', overview_data['Umsatz Brutto'].sum()),
+        ('Umsatz Netto', overview_data['Umsatz Netto'].sum()),
+        ('Materialkosten', overview_data['Materialkosten'].sum()),
+        ('Materialkosten %', (overview_data['Materialkosten'].sum() / overview_data['Umsatz Netto'].sum()) * 100 if overview_data['Umsatz Netto'].sum() != 0 else 0),
+        ('Deckungsbeitrag 1', overview_data['Deckungsbeitrag 1'].sum()),
+        ('Fulfillment-Kosten', overview_data['Fulfillment-Kosten'].sum()),
+        ('Versandkosten', overview_data['Versandkosten'].sum()),
+        ('Gesamtkosten Fulfillment €', overview_data['Gesamtkosten Fulfillment €'].sum()),
+        ('Gesamtkosten Fulfillment %', (overview_data['Gesamtkosten Fulfillment €'].sum() / overview_data['Umsatz Netto'].sum()) * 100 if overview_data['Umsatz Netto'].sum() != 0 else 0),
+        ('Transaktionskosten', overview_data['Transaktionskosten'].sum()),
+        ('Transaktionskosten %', (overview_data['Transaktionskosten'].sum() / overview_data['Umsatz Netto'].sum()) * 100 if overview_data['Umsatz Netto'].sum() != 0 else 0),
+        ('Deckungsbeitrag 2', overview_data['Deckungsbeitrag 2'].sum()),
+        ('Marketingkosten', overview_data['Marketingkosten'].sum()),
+        ('Marketingkosten %', (overview_data['Marketingkosten'].sum() / overview_data['Umsatz Netto'].sum()) * 100 if overview_data['Umsatz Netto'].sum() != 0 else 0),
+        ('Deckungsbeitrag 3', overview_data['Deckungsbeitrag 3'].sum()),
+        ('Deckungsbeitrag 3 %', (overview_data['Deckungsbeitrag 3'].sum() / overview_data['Umsatz Netto'].sum()) * 100 if overview_data['Umsatz Netto'].sum() != 0 else 0)
+    ]
     
-    with col2:
-        st.write(f"Transaktionskosten: {total_transaction_cost:.2f} EUR ({total_transaction_cost_percentage:.1f}%)")
-        st.write(f"Deckungsbeitrag 2: {total_contribution_margin_2:.2f} EUR")
-        st.write(f"Marketingkosten: {total_marketing_cost:.2f} EUR ({total_marketing_cost_percentage:.1f}%)")
-        st.write(f"Deckungsbeitrag 3: {total_contribution_margin_3:.2f} EUR")
-    
-    # Berechnung der Margen
-    db1_margin = (total_contribution_margin_1 / total_net_revenue) * 100 if total_net_revenue != 0 else 0
-    db2_margin = (total_contribution_margin_2 / total_net_revenue) * 100 if total_net_revenue != 0 else 0
-    db3_margin = (total_contribution_margin_3 / total_net_revenue) * 100 if total_net_revenue != 0 else 0
+    for item, value in summary_items:
+        if item.endswith('%'):
+            st.write(f"{item}: {value:.1f}%")
+        elif item in ['Umsatz Brutto', 'Umsatz Netto', 'Materialkosten', 'Deckungsbeitrag 1', 'Fulfillment-Kosten', 'Versandkosten', 'Gesamtkosten Fulfillment €', 'Transaktionskosten', 'Deckungsbeitrag 2', 'Marketingkosten', 'Deckungsbeitrag 3']:
+            st.write(f"{item}: {value:.2f} EUR")
+        else:
+            st.write(f"{item}: {value}")
     
     st.write("---")
     st.write(f"DB1 Marge: {db1_margin:.1f}%")
