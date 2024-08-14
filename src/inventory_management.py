@@ -3,6 +3,12 @@ from src.s3_utils import get_s3_fs
 import streamlit as st
 import logging
 import io
+import sys
+
+# Konfigurieren Sie das Logging direkt in dieser Datei
+logging.basicConfig(level=logging.DEBUG, 
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    handlers=[logging.StreamHandler(sys.stdout)])
 
 logger = logging.getLogger(__name__)
 
