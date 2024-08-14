@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import datetime, timedelta
 import logging
+import traceback
 import pandas as pd
 import os
 import json
@@ -15,8 +16,8 @@ from src.inventory_management import load_material_costs, save_material_costs
 
 
 # Configure logging
-logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 st.set_page_config(page_title="E-Commerce Profitabilitäts-App", layout="wide")
 
@@ -235,7 +236,13 @@ def manage_material_costs():
     st.subheader("Materialkosten verwalten")
     
     try:
+        logger.info("Starte manage_material_costs Funktion")
         costs = load_material_costs()
+        logger.debug(f"Geladene Kosten: {costs.shape}")
+        
+        if costs.empty:
+            logger.warning("Keine Materialkosten gefunden.")
+            st.warning("Keine Materialkosten gefunden. Bitte fügen Sie Daten hinzu.")
         
         edited_df = st.data_editor(
             costs,
@@ -245,13 +252,18 @@ def manage_material_costs():
             },
             num_rows="dynamic"
         )
+        logger.debug(f"Bearbeitete Kosten: {edited_df.shape}")
         
         if st.button("Änderungen speichern"):
+            logger.info("Speichern-Button gedrückt")
             save_material_costs(edited_df)
             st.success("Änderungen wurden gespeichert.")
+            logger.info("Änderungen erfolgreich gespeichert")
     except Exception as e:
-        st.error(f"Fehler beim Laden oder Speichern der Materialkosten: {str(e)}")
-        logger.error(f"Fehler in manage_material_costs: {str(e)}", exc_info=True)
+        error_msg = f"Fehler beim Laden oder Speichern der Materialkosten: {str(e)}"
+        logger.error(error_msg)
+        logger.error(f"Stacktrace: {traceback.format_exc()}")
+        st.error(error_msg)
 
 def extract_skus_and_quantities(order_items):
     try:
