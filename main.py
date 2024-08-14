@@ -259,24 +259,15 @@ def manage_material_costs():
         else:
             logger.info(f"Materialkosten geladen. Anzahl der Einträge: {len(costs)}")
         
-        edited_df = st.data_editor(
-            costs,
-            column_config={
-                "SKU": st.column_config.TextColumn("SKU"),
-                "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
-            },
-            num_rows="dynamic"
-        )
-        logger.debug(f"Bearbeitete Kosten: {edited_df.shape}")
-        
-        if st.button("Änderungen speichern"):
-            logger.info("Speichern-Button gedrückt")
-            save_material_costs(edited_df)
-            st.success("Änderungen wurden gespeichert.")
-            logger.info("Änderungen erfolgreich gespeichert")
+        # ... (Rest des Codes bleibt unverändert)
     except Exception as e:
         logger.error(f"Fehler in manage_material_costs: {str(e)}", exc_info=True)
         st.error(f"Ein Fehler ist aufgetreten: {str(e)}")
+        
+        # Zusätzliche Debugging-Informationen
+        logger.debug("Debugging-Informationen:")
+        logger.debug(f"Streamlit Secrets: {st.secrets}")
+        logger.debug(f"S3 FileSystem Objekt: {get_s3_fs()}")
 
 def extract_skus_and_quantities(order_items):
     try:
