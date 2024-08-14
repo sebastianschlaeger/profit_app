@@ -204,9 +204,6 @@ def display_filtered_overview_table():
                 # Berücksichtige beide Schreibweisen beim Filtern
                 filtered_df = filtered_df[filtered_df['Platform'].isin(['Ebay', 'eBay']) if st.session_state.selected_marketplace == 'Ebay' else (filtered_df['Platform'] == st.session_state.selected_marketplace)]
             
-            # Debugging: Zeige die Anzahl der gefilterten Zeilen
-            st.write("Filtered Data Rows:", len(filtered_df))
-            
             if filtered_df.empty:
                 st.warning("Keine Daten für den ausgewählten Filter verfügbar.")
             elif material_costs.empty or fulfillment_costs.empty or transaction_costs.empty:
@@ -217,9 +214,6 @@ def display_filtered_overview_table():
                 # Füge Marketingkosten hinzu
                 overview_data = pd.merge(overview_data, marketing_costs, left_on='Datum', right_on='Date', how='left')
                 
-                # Debugging: Zeige die Spalten nach dem Merge
-                st.write("Columns after merge:", overview_data.columns)
-                
                 # Wähle die entsprechende Marketingkostenspalte basierend auf dem ausgewählten Marktplatz
                 if st.session_state.selected_marketplace == 'Shopify':
                     overview_data['Marketingkosten'] = overview_data['Google Ads']
@@ -227,15 +221,10 @@ def display_filtered_overview_table():
                     overview_data['Marketingkosten'] = overview_data['Amazon Ads']
                 elif st.session_state.selected_marketplace == 'Ebay':
                     overview_data['Marketingkosten'] = overview_data['Ebay Ads']
-                    # Debugging: Zeige Ebay Ads Werte
-                    st.write("Ebay Ads Values:", overview_data['Ebay Ads'])
                 elif st.session_state.selected_marketplace == 'Kaufland.de':
                     overview_data['Marketingkosten'] = overview_data['Kaufland Ads']
                 else:
                     overview_data['Marketingkosten'] = overview_data['Google Ads'] + overview_data['Amazon Ads'] + overview_data['Ebay Ads'] + overview_data['Kaufland Ads']
-                
-                # Debugging: Zeige die resultierenden Marketingkosten
-                st.write("Resulting Marketing Costs:", overview_data['Marketingkosten'])
                 
                 overview_data['Marketingkosten'] = overview_data['Marketingkosten'].fillna(0)
                 overview_data['Deckungsbeitrag 3'] = overview_data['Deckungsbeitrag 2'] - overview_data['Marketingkosten']
@@ -256,6 +245,7 @@ def display_filtered_overview_table():
     except Exception as e:
         st.error(f"Fehler beim Verarbeiten der Daten: {str(e)}")
         st.error("Bitte überprüfen Sie die Logs für weitere Details.")
+
 
 def manage_material_costs():
     st.subheader("Materialkosten verwalten")
