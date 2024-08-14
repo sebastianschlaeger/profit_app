@@ -246,11 +246,13 @@ def manage_material_costs():
     try:
         logger.info("Starte manage_material_costs Funktion")
         costs = load_material_costs()
-        logger.debug(f"Geladene Kosten: {costs.shape}")
+        logger.debug(f"Geladene Kosten: {costs.shape if not costs.empty else 'Leere DataFrame'}")
         
         if costs.empty:
             logger.warning("Keine Materialkosten gefunden.")
             st.warning("Keine Materialkosten gefunden. Bitte fügen Sie Daten hinzu.")
+        else:
+            logger.info(f"Materialkosten geladen. Anzahl der Einträge: {len(costs)}")
         
         edited_df = st.data_editor(
             costs,
@@ -269,8 +271,7 @@ def manage_material_costs():
             logger.info("Änderungen erfolgreich gespeichert")
     except Exception as e:
         error_msg = f"Fehler beim Laden oder Speichern der Materialkosten: {str(e)}"
-        logger.error(error_msg)
-        logger.error(f"Stacktrace: {traceback.format_exc()}")
+        logger.error(error_msg, exc_info=True)
         st.error(error_msg)
 
 def extract_skus_and_quantities(order_items):
@@ -582,4 +583,5 @@ def main():
             manage_marketing_costs()
 
 if __name__ == "__main__":
+    logger.info("Anwendung gestartet")
     main()
