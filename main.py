@@ -40,22 +40,32 @@ def load_and_process_billbee_data(file_path):
     
     return df, grouped
 
-@st.cache_data
-def load_material_costs(file_path='material_costs.csv'):
-    if os.path.exists(file_path):
-        # Lade die CSV und konvertiere die SKU-Spalte explizit zu Strings
-        df = pd.read_csv(file_path)
-        df['SKU'] = df['SKU'].astype(str)
-        return df
-    else:
-        st.warning(f"Die Datei {file_path} wurde nicht gefunden. Es wird eine leere Tabelle erstellt.")
+def load_material_costs():
+    s3 = get_s3_fs()
+    bucket_name = st.secrets['aws']['S3_BUCKET_NAME']
+    file_path = f"{bucket_name}/material_costs.csv"
+    try:
+        if s3.exists(file_path):
+            with s3.open(file_path, 'rb') as f:
+                df = pd.read_csv(f)
+                df['SKU'] = df['SKU'].astype(str)
+                return df
         return pd.DataFrame(columns=['SKU', 'Cost'])
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Materialkostendaten: {str(e)}")
+        raise
 
-def save_material_costs(df, file_path='material_costs.csv'):
-    # Stelle sicher, dass SKU als String gespeichert wird
-    df['SKU'] = df['SKU'].astype(str)
-    df.to_csv(file_path, index=False)
-    st.cache_data.clear()  # Cache leeren, damit die Änderungen beim nächsten Laden berücksichtigt werden
+def save_material_costs(df):
+    s3 = get_s3_fs()
+    bucket_name = st.secrets['aws']['S3_BUCKET_NAME']
+    file_path = f"{bucket_name}/material_costs.csv"
+    try:
+        df['SKU'] = df['SKU'].astype(str)
+        with s3.open(file_path, 'w') as f:
+            df.to_csv(f, index=False)
+    except Exception as e:
+        logger.error(f"Fehler beim Speichern der Materialkostendaten: {str(e)}")
+        raise
 
 def calculate_material_costs(orders_df, material_costs_df):
     # Extrahieren der ersten 5 Ziffern aus der SKU für die Zuordnung
