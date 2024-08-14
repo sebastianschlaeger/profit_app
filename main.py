@@ -201,7 +201,29 @@ def display_filtered_overview_table():
             elif material_costs.empty or fulfillment_costs.empty or transaction_costs.empty:
                 st.warning("Keine Material-, Fulfillment- oder Transaktionskosten gefunden.")
             else:
-                overview_data = calculate_overview_data(filtered_df, material_costs.set_index('SKU')['Cost'].to_dict(), fulfillment_costs, transaction_costs, marketing_costs, selected_marketplace=st.session_state.selected_marketplace)
+                overview_data = calculate_overview_data(filtered_df, material_costs.set_index('SKU')['Cost'].to_dict(), fulfillment_costs, transaction_costs)
+                
+                # Füge Marketingkosten hinzu
+                overview_data = pd.merge(overview_data, marketing_costs, left_on='Datum', right_on='Date', how='left')
+                
+                # Wähle die entsprechende Marketingkostenspalte basierend auf dem ausgewählten Marktplatz
+                if st.session_state.selected_marketplace == 'Shopify':
+                    overview_data['Marketingkosten'] = overview_data['Google Ads']
+                elif st.session_state.selected_marketplace == 'Amazon':
+                    overview_data['Marketingkosten'] = overview_data['Amazon Ads']
+                elif st.session_state.selected_marketplace == 'Ebay':
+                    overview_data['Marketingkosten'] = overview_data['Ebay Ads']
+                elif st.session_state.selected_marketplace == 'Kaufland.de':
+                    overview_data['Marketingkosten'] = overview_data['Kaufland Ads']
+                else:
+                    overview_data['Marketingkosten'] = overview_data['Google Ads'] + overview_data['Amazon Ads'] + overview_data['Ebay Ads'] + overview_data['Kaufland Ads']
+                
+                overview_data['Marketingkosten'] = overview_data['Marketingkosten'].fillna(0)
+                overview_data['Deckungsbeitrag 3'] = overview_data['Deckungsbeitrag 2'] - overview_data['Marketingkosten']
+                
+                # Runde die neuen Spalten
+                overview_data['Marketingkosten'] = overview_data['Marketingkosten'].round(2)
+                overview_data['Deckungsbeitrag 3'] = overview_data['Deckungsbeitrag 3'].round(2)
                 
                 # Transponiere die Daten und zeige sie an
                 transposed_data = transpose_overview_data(overview_data)
@@ -249,7 +271,7 @@ def extract_skus_and_quantities(order_items):
         logger.error(f"Problematische order_items: {order_items}")
         return []
 
-def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, transaction_costs, marketing_costs, selected_marketplace=None, selected_country=None):
+def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, transaction_costs, selected_marketplace=None, selected_country=None):
     try:
         billbee_data['CreatedAt'] = pd.to_datetime(billbee_data['CreatedAt']).dt.date
         billbee_data['OrderItems'] = billbee_data['OrderItems'].apply(json.loads)
@@ -290,23 +312,6 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
             'TransactionCost': 'sum'
         }).reset_index()
         
-        # Füge Marketingkosten hinzu
-        grouped = pd.merge(grouped, marketing_costs, left_on='CreatedAt', right_on='Date', how='left')
-        
-        # Wähle die entsprechende Marketingkostenspalte basierend auf dem ausgewählten Marktplatz
-        if selected_marketplace == 'Shopify':
-            grouped['Marketingkosten'] = grouped['Google Ads']
-        elif selected_marketplace == 'Amazon':
-            grouped['Marketingkosten'] = grouped['Amazon Ads']
-        elif selected_marketplace == 'Ebay':
-            grouped['Marketingkosten'] = grouped['Ebay Ads']
-        elif selected_marketplace == 'Kaufland.de':
-            grouped['Marketingkosten'] = grouped['Kaufland Ads']
-        else:
-            grouped['Marketingkosten'] = grouped['Google Ads'] + grouped['Amazon Ads'] + grouped['Ebay Ads'] + grouped['Kaufland Ads']
-        
-        grouped['Marketingkosten'] = grouped['Marketingkosten'].fillna(0)
-        
         # Berechne die zusätzlichen Metriken
         grouped['UmsatzNetto'] = grouped['TotalOrderPrice'] - grouped['TaxAmount']
         grouped['MaterialkostenProzent'] = (grouped['MaterialCost'] / grouped['UmsatzNetto']) * 100
@@ -315,7 +320,6 @@ def calculate_overview_data(billbee_data, material_costs, fulfillment_costs, tra
         grouped['GesamtkostenFulfillmentProzent'] = (grouped['GesamtkostenFulfillment'] / grouped['UmsatzNetto']) * 100
         grouped['TransaktionskostenProzent'] = (grouped['TransactionCost'] / grouped['UmsatzNetto']) * 100
         grouped['Deckungsbeitrag2'] = grouped['Deckungsbeitrag1'] - grouped['GesamtkostenFulfillment'] - grouped['TransactionCost']
-        grouped['Deckungsbeitrag3'] = grouped['Deckungsbeitrag2'] - grouped['Marketingkosten']
         
         # Formatiere die Tabelle
         result = grouped.rename(columns={
