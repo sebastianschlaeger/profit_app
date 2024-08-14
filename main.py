@@ -238,7 +238,6 @@ def display_filtered_overview_table():
         st.error(f"Fehler beim Verarbeiten der Daten: {str(e)}")
         st.error("Bitte überprüfen Sie die Logs für weitere Details.")
 
-
 def manage_material_costs():
     st.subheader("Materialkosten verwalten")
     
