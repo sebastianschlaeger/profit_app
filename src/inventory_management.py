@@ -6,7 +6,6 @@ import traceback
 import io
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 def load_material_costs():
     logger.info("Starte load_material_costs Funktion")
@@ -15,13 +14,9 @@ def load_material_costs():
     
     bucket_name = st.secrets['aws']['S3_BUCKET_NAME']
     file_path = f"{bucket_name}/material_costs.csv"
-    logger.info(f"Vollständiger S3-Pfad: {file_path}")
+    logger.info(f"Versuche, Datei zu laden: {file_path}")
     
     try:
-        # Liste alle Dateien im Bucket auf
-        files_in_bucket = s3.ls(bucket_name)
-        logger.info(f"Dateien im Bucket: {files_in_bucket}")
-        
         logger.debug(f"Überprüfe Existenz der Datei: {file_path}")
         if s3.exists(file_path):
             logger.info(f"Datei gefunden: {file_path}")
@@ -45,7 +40,6 @@ def load_material_costs():
         logger.error(f"Fehler beim Laden der Materialkostendaten: {str(e)}")
         logger.error(f"Stacktrace: {traceback.format_exc()}")
         raise
-
 def save_material_costs(df):
     logger.info("Starte save_material_costs Funktion")
     s3 = get_s3_fs()
