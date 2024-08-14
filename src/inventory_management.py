@@ -11,13 +11,20 @@ logger.info("inventory_management.py wird geladen")
 def load_material_costs():
     logger.info("Starte load_material_costs Funktion")
     try:
+        logger.info("Versuche, get_s3_fs aufzurufen")
         s3 = get_s3_fs()
-        logger.info("S3 FileSystem Objekt erstellt")
+        logger.info("S3 FileSystem Objekt erfolgreich erstellt")
     except Exception as e:
         logger.error(f"Fehler beim Erstellen des S3 FileSystem Objekts: {str(e)}", exc_info=True)
         return pd.DataFrame(columns=['SKU', 'Cost'])
 
-    bucket_name = st.secrets['aws']['S3_BUCKET_NAME']
+    try:
+        bucket_name = st.secrets['aws']['S3_BUCKET_NAME']
+        logger.info(f"S3 Bucket Name: {bucket_name}")
+    except Exception as e:
+        logger.error(f"Fehler beim Zugriff auf S3 Bucket Name: {str(e)}", exc_info=True)
+        return pd.DataFrame(columns=['SKU', 'Cost'])
+
     file_path = f"{bucket_name}/material_costs.csv"
     logger.info(f"Vollständiger S3-Pfad: {file_path}")
     
