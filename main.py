@@ -229,10 +229,14 @@ def display_filtered_overview_table():
                 transposed_data = transpose_overview_data(overview_data)
                 st.dataframe(transposed_data, height=600, use_container_width=True)
                 display_summary(overview_data)
-    
-        except Exception as e:
-            st.error(f"Fehler beim Verarbeiten der Daten: {str(e)}")
-            st.error("Bitte überprüfen Sie die Logs für weitere Details.")
+        else:
+            st.warning(f"Keine Daten für den ausgewählten Zeitraum verfügbar.")
+            if missing_dates:
+                st.info(f"Fehlende Daten für folgende Tage: {', '.join(str(date) for date in missing_dates)}")
+        
+    except Exception as e:
+        st.error(f"Fehler beim Verarbeiten der Daten: {str(e)}")
+        st.error("Bitte überprüfen Sie die Logs für weitere Details.")
 
 
 def manage_material_costs():
