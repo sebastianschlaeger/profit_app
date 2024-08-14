@@ -246,9 +246,11 @@ def display_filtered_overview_table():
 def manage_material_costs():
     st.subheader("Materialkosten verwalten")
     
+    logger.info("Starte manage_material_costs Funktion")
     try:
-        logger.info("Starte manage_material_costs Funktion")
+        logger.info("Versuche, load_material_costs aufzurufen")
         costs = load_material_costs()
+        logger.info(f"load_material_costs aufgerufen. Ergebnis: {type(costs)}")
         logger.debug(f"Geladene Kosten: {costs.shape if not costs.empty else 'Leere DataFrame'}")
         
         if costs.empty:
@@ -273,9 +275,8 @@ def manage_material_costs():
             st.success("Änderungen wurden gespeichert.")
             logger.info("Änderungen erfolgreich gespeichert")
     except Exception as e:
-        error_msg = f"Fehler beim Laden oder Speichern der Materialkosten: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        st.error(error_msg)
+        logger.error(f"Fehler in manage_material_costs: {str(e)}", exc_info=True)
+        st.error(f"Ein Fehler ist aufgetreten: {str(e)}")
 
 def extract_skus_and_quantities(order_items):
     try:
