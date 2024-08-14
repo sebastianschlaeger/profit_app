@@ -234,20 +234,26 @@ def display_filtered_overview_table():
 def manage_material_costs():
     st.subheader("Materialkosten verwalten")
     
-    costs = load_material_costs()
-    
-    edited_df = st.data_editor(
-        costs,
-        column_config={
-            "SKU": st.column_config.TextColumn("SKU"),
-            "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
-        },
-        num_rows="dynamic"
-    )
-    
-    if st.button("Änderungen speichern"):
-        save_material_costs(edited_df)
-        st.success("Änderungen wurden gespeichert.")
+    try:
+        costs = load_material_costs()
+        if costs.empty:
+            st.warning("Keine Materialkosten gefunden. Bitte fügen Sie Daten hinzu.")
+        
+        edited_df = st.data_editor(
+            costs,
+            column_config={
+                "SKU": st.column_config.TextColumn("SKU"),
+                "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
+            },
+            num_rows="dynamic"
+        )
+        
+        if st.button("Änderungen speichern"):
+            save_material_costs(edited_df)
+            st.success("Änderungen wurden gespeichert.")
+    except Exception as e:
+        st.error(f"Fehler beim Laden oder Speichern der Materialkosten: {str(e)}")
+        logger.error(f"Fehler in manage_material_costs: {str(e)}", exc_info=True)
 
 def extract_skus_and_quantities(order_items):
     try:
