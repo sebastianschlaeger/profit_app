@@ -236,8 +236,6 @@ def manage_material_costs():
     
     try:
         costs = load_material_costs()
-        if costs.empty:
-            st.warning("Keine Materialkosten gefunden. Bitte fügen Sie Daten hinzu.")
         
         edited_df = st.data_editor(
             costs,
