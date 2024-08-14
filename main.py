@@ -15,9 +15,17 @@ from src.marketing_costs import load_marketing_costs, save_marketing_costs
 from src.inventory_management import load_material_costs, save_material_costs
 
 
-# Configure logging
+# Konfiguriere Logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("app.log"),
+        logging.StreamHandler()
+    ]
+)
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 st.set_page_config(page_title="E-Commerce Profitabilitäts-App", layout="wide")
 
