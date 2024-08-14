@@ -11,8 +11,6 @@ from src.data_processor import process_orders, create_dataframe, save_to_csv
 from src.fulfillment_costs import calculate_shipping_costs, load_fulfillment_costs, save_fulfillment_costs
 from src.transaction_costs import load_transaction_costs, save_transaction_costs
 from src.marketing_costs import load_marketing_costs, save_marketing_costs
-from src.material_costs import load_material_costs, save_material_costs, manage_material_costs
-
 
 # Configure logging
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
