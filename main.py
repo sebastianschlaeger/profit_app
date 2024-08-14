@@ -346,6 +346,9 @@ def transpose_overview_data(overview_data):
     # Entferne die TaxAmount Spalte
     overview_data = overview_data.drop('TaxAmount', axis=1, errors='ignore')
     
+    # Berechne Deckungsbeitrag 3 %
+    overview_data['Deckungsbeitrag 3 %'] = (overview_data['Deckungsbeitrag 3'] / overview_data['Umsatz Netto']) * 100
+    
     # Setze das Datum als Index
     overview_data_indexed = overview_data.set_index('Datum')
     
@@ -366,17 +369,24 @@ def transpose_overview_data(overview_data):
         'Deckungsbeitrag 2',
         '',  # Leerzeile
         'Marketingkosten',
-        'Deckungsbeitrag 3'
+        'Deckungsbeitrag 3',
+        'Deckungsbeitrag 3 %'
     ]
     
     # Sortiere die Daten entsprechend der gewünschten Reihenfolge
     transposed_data = transposed_data.reindex(desired_order)
     
     # Formatiere die Daten
-    euro_rows = [row for row in desired_order if row != '']
+    euro_rows = ['Umsatz Brutto', 'Umsatz Netto', 'Materialkosten', 'Deckungsbeitrag 1', 
+                 'Fulfillment-Kosten', 'Versandkosten', 'Transaktionskosten', 
+                 'Deckungsbeitrag 2', 'Marketingkosten', 'Deckungsbeitrag 3']
+    percentage_rows = ['Deckungsbeitrag 3 %']
     
     for row in euro_rows:
         transposed_data.loc[row] = transposed_data.loc[row].apply(lambda x: f"{x:.2f} €" if pd.notnull(x) else "")
+    
+    for row in percentage_rows:
+        transposed_data.loc[row] = transposed_data.loc[row].apply(lambda x: f"{x:.1f}%" if pd.notnull(x) else "")
     
     # Entferne "None" aus den Leerzeilen
     transposed_data.loc[''] = ''
