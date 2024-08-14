@@ -15,7 +15,10 @@ from src.marketing_costs import load_marketing_costs, save_marketing_costs
 from src.inventory_management import load_material_costs, save_material_costs
 
 
-# Konfiguriere Logging
+# Erhöhen Sie das Logging-Level für Watchdog
+logging.getLogger('watchdog').setLevel(logging.WARNING)
+
+# Konfigurieren Sie das Haupt-Logging
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
