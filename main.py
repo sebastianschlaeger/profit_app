@@ -1,7 +1,6 @@
 import streamlit as st
 from datetime import datetime, timedelta
 import logging
-import traceback
 import pandas as pd
 import os
 import json
@@ -12,22 +11,9 @@ from src.data_processor import process_orders, create_dataframe, save_to_csv
 from src.fulfillment_costs import calculate_shipping_costs, load_fulfillment_costs, save_fulfillment_costs
 from src.transaction_costs import load_transaction_costs, save_transaction_costs
 from src.marketing_costs import load_marketing_costs, save_marketing_costs
-from src.inventory_management import load_material_costs, save_material_costs
 
-
-# Erhöhen Sie das Logging-Level für Watchdog
-logging.getLogger('watchdog').setLevel(logging.WARNING)
-
-# Konfigurieren Sie das Haupt-Logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("app.log"),
-        logging.StreamHandler()
-    ]
-)
-
+# Configure logging
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="E-Commerce Profitabilitäts-App", layout="wide")
@@ -246,28 +232,20 @@ def display_filtered_overview_table():
 def manage_material_costs():
     st.subheader("Materialkosten verwalten")
     
-    logger.info("Starte manage_material_costs Funktion")
-    try:
-        logger.info("Versuche, load_material_costs aufzurufen")
-        costs = load_material_costs()
-        logger.info(f"load_material_costs aufgerufen. Ergebnis: {type(costs)}")
-        logger.debug(f"Geladene Kosten: {costs.shape if not costs.empty else 'Leere DataFrame'}")
-        
-        if costs.empty:
-            logger.warning("Keine Materialkosten gefunden.")
-            st.warning("Keine Materialkosten gefunden. Bitte fügen Sie Daten hinzu.")
-        else:
-            logger.info(f"Materialkosten geladen. Anzahl der Einträge: {len(costs)}")
-        
-        # ... (Rest des Codes bleibt unverändert)
-    except Exception as e:
-        logger.error(f"Fehler in manage_material_costs: {str(e)}", exc_info=True)
-        st.error(f"Ein Fehler ist aufgetreten: {str(e)}")
-        
-        # Zusätzliche Debugging-Informationen
-        logger.debug("Debugging-Informationen:")
-        logger.debug(f"Streamlit Secrets: {st.secrets}")
-        logger.debug(f"S3 FileSystem Objekt: {get_s3_fs()}")
+    costs = load_material_costs()
+    
+    edited_df = st.data_editor(
+        costs,
+        column_config={
+            "SKU": st.column_config.TextColumn("SKU"),
+            "Cost": st.column_config.NumberColumn("Materialkosten", min_value=0, step=0.01),
+        },
+        num_rows="dynamic"
+    )
+    
+    if st.button("Änderungen speichern"):
+        save_material_costs(edited_df)
+        st.success("Änderungen wurden gespeichert.")
 
 def extract_skus_and_quantities(order_items):
     try:
@@ -578,5 +556,4 @@ def main():
             manage_marketing_costs()
 
 if __name__ == "__main__":
-    logger.info("Anwendung gestartet")
     main()
