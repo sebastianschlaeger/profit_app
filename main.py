@@ -423,11 +423,6 @@ def display_summary(overview_data):
             st.write(f"{item}: {value:.2f} EUR")
         else:
             st.write(f"{item}: {value}")
-    
-    st.write("---")
-    st.write(f"DB1 Marge: {db1_margin:.1f}%")
-    st.write(f"DB2 Marge: {db2_margin:.1f}%")
-    st.write(f"DB3 Marge: {db3_margin:.1f}%")
 
 
 def fetch_and_process_data(date):
