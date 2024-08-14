@@ -180,21 +180,33 @@ def display_filtered_overview_table():
         if all_data:
             combined_df = pd.concat(all_data, ignore_index=True)
             
+            # Debugging: Zeige unique Werte in der Platform-Spalte
+            st.write("Unique Platforms:", combined_df['Platform'].unique())
+            
             # Laden der Kosten
             material_costs = load_material_costs()
             fulfillment_costs = load_fulfillment_costs()
             transaction_costs = load_transaction_costs()
             marketing_costs = load_marketing_costs()
             
+            # Debugging: Zeige die ersten Zeilen der Marketingkosten
+            st.write("Marketing Costs Sample:", marketing_costs.head())
+            
             # Erstellen der Auswahlfelder für Marktplatz
             unique_marketplaces = ["Alle"] + list(combined_df['Platform'].unique())
             
             st.session_state.selected_marketplace = st.selectbox("Marktplatz auswählen", unique_marketplaces, index=unique_marketplaces.index(st.session_state.selected_marketplace))
             
+            # Debugging: Zeige den ausgewählten Marktplatz
+            st.write("Selected Marketplace:", st.session_state.selected_marketplace)
+            
             # Filtern der Daten basierend auf dem ausgewählten Marktplatz
             filtered_df = combined_df
             if st.session_state.selected_marketplace != "Alle":
                 filtered_df = filtered_df[filtered_df['Platform'] == st.session_state.selected_marketplace]
+            
+            # Debugging: Zeige die Anzahl der gefilterten Zeilen
+            st.write("Filtered Data Rows:", len(filtered_df))
             
             if filtered_df.empty:
                 st.warning("Keine Daten für den ausgewählten Filter verfügbar.")
@@ -206,6 +218,9 @@ def display_filtered_overview_table():
                 # Füge Marketingkosten hinzu
                 overview_data = pd.merge(overview_data, marketing_costs, left_on='Datum', right_on='Date', how='left')
                 
+                # Debugging: Zeige die Spalten nach dem Merge
+                st.write("Columns after merge:", overview_data.columns)
+                
                 # Wähle die entsprechende Marketingkostenspalte basierend auf dem ausgewählten Marktplatz
                 if st.session_state.selected_marketplace == 'Shopify':
                     overview_data['Marketingkosten'] = overview_data['Google Ads']
@@ -213,10 +228,15 @@ def display_filtered_overview_table():
                     overview_data['Marketingkosten'] = overview_data['Amazon Ads']
                 elif st.session_state.selected_marketplace == 'Ebay':
                     overview_data['Marketingkosten'] = overview_data['Ebay Ads']
+                    # Debugging: Zeige Ebay Ads Werte
+                    st.write("Ebay Ads Values:", overview_data['Ebay Ads'])
                 elif st.session_state.selected_marketplace == 'Kaufland.de':
                     overview_data['Marketingkosten'] = overview_data['Kaufland Ads']
                 else:
                     overview_data['Marketingkosten'] = overview_data['Google Ads'] + overview_data['Amazon Ads'] + overview_data['Ebay Ads'] + overview_data['Kaufland Ads']
+                
+                # Debugging: Zeige die resultierenden Marketingkosten
+                st.write("Resulting Marketing Costs:", overview_data['Marketingkosten'])
                 
                 overview_data['Marketingkosten'] = overview_data['Marketingkosten'].fillna(0)
                 overview_data['Deckungsbeitrag 3'] = overview_data['Deckungsbeitrag 2'] - overview_data['Marketingkosten']
